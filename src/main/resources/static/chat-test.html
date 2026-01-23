@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        #messages {
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #f9f9f9;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            background: #fff;
+            border-radius: 4px;
+            border-left: 3px solid #667eea;
+        }
+        .message.event {
+            background: #e3f2fd;
+            border-left-color: #2196f3;
+        }
+        .message.error {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        .controls {
+            margin-bottom: 15px;
+        }
+        input {
+            padding: 10px;
+            margin-right: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        input[type="text"] {
+            width: calc(70% - 20px);
+        }
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background: #f0f0f0;
+        }
+        .status.connected {
+            background: #c8e6c9;
+        }
+        .status.disconnected {
+            background: #ffcdd2;
+        }
+    </style>
+</head>
+<body>
+<h1>🎮 Stream Chat WebSocket Test</h1>
+
+<div class="status" id="status">❌ Disconnected</div>
+
+<div class="controls">
+    <input type="text" id="jwtToken" placeholder="JWT Token (from Swagger)">
+    <br><br>
+    <input type="text" id="streamKey" placeholder="Stream Key (from POST /api/streams)">
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+</div>
+
+<div id="messages"></div>
+
+<div class="controls">
+    <input type="text" id="messageInput" placeholder="Type a message...">
+    <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+</div>
+
+<script>
+    let stompClient = null;
+    let streamKey = '';
+    let connected = false;
+    let jwtToken = '';
+
+    function updateStatus(status, connected) {
+        const statusDiv = document.getElementById('status');
+        statusDiv.textContent = status;
+        statusDiv.className = 'status ' + (connected ? 'connected' : 'disconnected');
+        document.getElementById('sendBtn').disabled = !connected;
+    }
+
+    function connect() {
+        const token = document.getElementById('jwtToken').value.trim();
+        streamKey = document.getElementById('streamKey').value;
+
+        if (!token) {
+            addMessage('❌ Please enter JWT token from Swagger', 'error');
+            return;
+        }
+
+        // Store token for later use
+        jwtToken = token;
+
+        updateStatus('🔄 Connecting...', false);
+
+        const socket = new SockJS('http://localhost:8080/ws-chat');
+        stompClient = Stomp.over(socket);
+
+        // Add JWT token to headers
+        const headers = {
+            'Authorization': 'Bearer ' + jwtToken
+        };
+
+        stompClient.connect(headers, function(frame) {
+            console.log('Connected: ' + frame);
+            connected = true;
+            updateStatus('✅ Connected to stream: ' + streamKey, true);
+            addMessage('✅ Connected successfully!', 'event');
+
+            // Subscribe to chat messages
+            stompClient.subscribe('/topic/stream/' + streamKey, function(message) {
+                const msg = JSON.parse(message.body);
+                addMessage(`[${msg.username}]: ${msg.content}`);
+            }, headers);
+
+            // Subscribe to events
+            stompClient.subscribe('/topic/stream/' + streamKey + '/events', function(message) {
+                const msg = JSON.parse(message.body);
+                addMessage(`📢 ${msg.content}`, 'event');
+            }, headers);
+
+            // Send join message with auth headers
+            const authHeaders = {'Authorization': 'Bearer ' + jwtToken};
+            stompClient.send('/app/chat.join/' + streamKey, authHeaders, JSON.stringify({}));
+
+        }, function(error) {
+            console.error('Connection error:', error);
+            connected = false;
+            updateStatus('❌ Connection failed', false);
+            addMessage('❌ Connection failed: ' + error, 'error');
+        });
+    }
+
+    function disconnect() {
+        if (stompClient !== null && connected) {
+            // Send leave message before disconnecting with auth headers
+            const authHeaders = {'Authorization': 'Bearer ' + jwtToken};
+            stompClient.send('/app/chat.leave/' + streamKey, authHeaders, JSON.stringify({}));
+            stompClient.disconnect();
+        }
+        connected = false;
+        updateStatus('❌ Disconnected', false);
+        addMessage('❌ Disconnected', 'event');
+    }
+
+    function sendMessage() {
+        const content = document.getElementById('messageInput').value.trim();
+        if (content && stompClient && connected) {
+            try {
+                // Include auth headers with every message
+                const authHeaders = {'Authorization': 'Bearer ' + jwtToken};
+                stompClient.send('/app/chat.send/' + streamKey, authHeaders, JSON.stringify({
+                    content: content,
+                    messageType: 'CHAT'
+                }));
+                document.getElementById('messageInput').value = '';
+            } catch (error) {
+                console.error('Send error:', error);
+                addMessage('❌ Failed to send: ' + error, 'error');
+            }
+        }
+    }
+
+    function addMessage(text, type = 'message') {
+        const messagesDiv = document.getElementById('messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ' + type;
+        const timestamp = new Date().toLocaleTimeString();
+        messageDiv.textContent = `[${timestamp}] ${text}`;
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Send message on Enter key
+    document.getElementById('messageInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    updateStatus('❌ Disconnected', false);
+</script>
+</body>
+</html>
