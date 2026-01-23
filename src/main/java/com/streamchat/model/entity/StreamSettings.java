@@ -1,5 +1,6 @@
 package com.streamchat.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "stream_settings")
+@JsonIgnoreProperties({"stream"})
 @Getter
 @Setter
 @NoArgsConstructor

@@ -96,6 +96,31 @@ Authorization: Bearer <JWT>
 - Redis pub/sub channel naming is currently inconsistent (publisher uses `chat:messages:{streamKey}` while the subscriber container listens on `chat:messages`), so cross-instance message propagation may not work as intended.
 - If WebSocket messages are sent without a valid authenticated principal, handlers may fail (this should be guarded at the inbound interceptor level).
 
+## Testing
+
+This project contains 3 levels of tests:
+
+- **Unit tests (services)** — `src/test/java/com/streamchat/service`
+  - Fast tests using Mockito (no Spring context).
+- **Controller tests (`@WebMvcTest`)** — `src/test/java/com/streamchat/controller`
+  - Validate REST contracts (status codes, JSON shape) with mocked dependencies.
+- **Integration tests (`@SpringBootTest`)** — `src/test/java/com/streamchat/integration`
+  - Run against a real Spring context.
+  - Use `dev` profile (H2 + `create-drop`, Redis auto-config excluded).
+  - Moderation integration tests focus on HTTP + security flow and use mocks for moderation services because of current placeholder IDs.
+
+### Run all tests
+
+```bash
+mvn test
+```
+
+### Run a specific test class
+
+```bash
+mvn test -Dtest=com.streamchat.integration.AuthIntegrationTest
+```
+
 ## Run locally (dev profile)
 
 1. Build:
