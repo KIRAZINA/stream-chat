@@ -1,14 +1,18 @@
 package com.streamchat.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.streamchat.model.entity.Stream;
+import com.streamchat.model.entity.User;
 import com.streamchat.model.entity.ModerationLog;
 import com.streamchat.model.entity.UserStreamRole;
 import com.streamchat.repository.ModerationLogRepository;
+import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
 import com.streamchat.security.JwtTokenProvider;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -20,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.verify;
@@ -50,6 +55,9 @@ class ModerationControllerTest {
     private UserRepository userRepository;
 
     @MockBean
+    private StreamRepository streamRepository;
+
+    @MockBean
     private ModerationLogRepository moderationLogRepository;
 
     @MockBean
@@ -61,8 +69,32 @@ class ModerationControllerTest {
     @MockBean
     private UserDetailsService userDetailsService;
 
+    private Stream testStream;
+    private User testModerator;
+    private User testTargetUser;
+
+    @BeforeEach
+    void setUp() {
+        testStream = Stream.builder()
+                .id(1L)
+                .streamKey("stream-abc")
+                .build();
+
+        testModerator = User.builder()
+                .id(1L)
+                .username("mod")
+                .build();
+
+        testTargetUser = User.builder()
+                .id(2L)
+                .username("target")
+                .build();
+    }
+
     @Test
     void deleteMessage_success() throws Exception {
+        when(streamRepository.existsByStreamKey("stream-abc")).thenReturn(true);
+
         mockMvc.perform(delete("/api/streams/stream-abc/moderate/messages/123")
                         .with(user("mod").roles("MODERATOR"))
                         .with(csrf()))
@@ -74,6 +106,10 @@ class ModerationControllerTest {
 
     @Test
     void timeoutUser_success() throws Exception {
+        when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername("mod")).thenReturn(Optional.of(testModerator));
+        when(userRepository.findByUsername("target")).thenReturn(Optional.of(testTargetUser));
+
         mockMvc.perform(post("/api/streams/stream-abc/moderate/timeout")
                         .with(user("mod").roles("MODERATOR"))
                         .with(csrf())
@@ -86,11 +122,15 @@ class ModerationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("success"));
 
-        verify(moderationService).timeoutUser(eq(1L), eq(1L), eq(1L), eq(60), eq("spam"));
+        verify(moderationService).timeoutUser(eq(1L), eq(2L), eq(1L), eq(60), eq("spam"));
     }
 
     @Test
     void banUser_success() throws Exception {
+        when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername("mod")).thenReturn(Optional.of(testModerator));
+        when(userRepository.findByUsername("target")).thenReturn(Optional.of(testTargetUser));
+
         mockMvc.perform(post("/api/streams/stream-abc/moderate/ban")
                         .with(user("mod").roles("MODERATOR"))
                         .with(csrf())
@@ -103,11 +143,26 @@ class ModerationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("success"));
 
-        verify(moderationService).banUser(eq(1L), eq(1L), eq(1L), eq(true), isNull(), eq("toxicity"));
+        verify(moderationService).banUser(eq(1L), eq(2L), eq(1L), eq(true), isNull(), eq("toxicity"));
+    }
+
+    @Test
+    void unbanUser_success() throws Exception {
+        when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername("mod")).thenReturn(Optional.of(testModerator));
+
+        mockMvc.perform(delete("/api/streams/stream-abc/moderate/ban/2")
+                        .with(user("mod").roles("MODERATOR"))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("success"));
+
+        verify(moderationService).unbanUser(eq(1L), eq(2L), eq(1L));
     }
 
     @Test
     void getModerationLogs_success() throws Exception {
+        when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
         when(moderationLogRepository.findByStreamIdOrderByCreatedAtDesc(eq(1L)))
                 .thenReturn(List.of(ModerationLog.builder().id(1L).build()));
 
@@ -121,6 +176,7 @@ class ModerationControllerTest {
 
     @Test
     void getModerators_success() throws Exception {
+        when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
         when(userStreamRoleRepository.findModerators(eq(1L)))
                 .thenReturn(List.of(UserStreamRole.builder().id(1L).build()));
 

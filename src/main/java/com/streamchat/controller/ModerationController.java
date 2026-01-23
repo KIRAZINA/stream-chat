@@ -1,11 +1,15 @@
 package com.streamchat.controller;
 
+import com.streamchat.exception.ResourceNotFoundException;
 import com.streamchat.model.dto.ModerationActionDTO;
 import com.streamchat.model.entity.ModerationLog;
+import com.streamchat.model.entity.Stream;
+import com.streamchat.model.entity.User;
 import com.streamchat.model.entity.UserStreamRole;
 import com.streamchat.model.enums.ModerationActionType;
 import com.streamchat.model.enums.Role;
 import com.streamchat.repository.ModerationLogRepository;
+import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
 import com.streamchat.service.ChatService;
@@ -38,6 +42,7 @@ public class ModerationController {
     private final ModerationService moderationService;
     private final ChatService chatService;
     private final UserRepository userRepository;
+    private final StreamRepository streamRepository;
     private final ModerationLogRepository moderationLogRepository;
     private final UserStreamRoleRepository userStreamRoleRepository;
 
@@ -64,12 +69,16 @@ public class ModerationController {
         Integer duration = (Integer) request.get("durationSeconds");
         String reason = (String) request.get("reason");
 
-        // TODO: Get actual IDs from repositories
-        Long streamId = 1L; // Placeholder
-        Long userId = 1L; // Placeholder
-        Long moderatorId = 1L; // Placeholder
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
 
-        moderationService.timeoutUser(streamId, userId, moderatorId, duration, reason);
+        User targetUser = userRepository.findByUsername(targetUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + targetUsername));
+
+        User moderator = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("Moderator not found"));
+
+        moderationService.timeoutUser(stream.getId(), targetUser.getId(), moderator.getId(), duration, reason);
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",
@@ -101,12 +110,16 @@ public class ModerationController {
         Boolean permanent = (Boolean) request.getOrDefault("permanent", true);
         Integer duration = (Integer) request.get("durationSeconds");
 
-        // TODO: Get actual IDs from repositories
-        Long streamId = 1L; // Placeholder
-        Long userId = 1L; // Placeholder
-        Long moderatorId = 1L; // Placeholder
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
 
-        moderationService.banUser(streamId, userId, moderatorId, permanent, duration, reason);
+        User targetUser = userRepository.findByUsername(targetUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + targetUsername));
+
+        User moderator = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("Moderator not found"));
+
+        moderationService.banUser(stream.getId(), targetUser.getId(), moderator.getId(), permanent, duration, reason);
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",
@@ -133,11 +146,13 @@ public class ModerationController {
         log.info("Unban request: stream={}, userId={}, moderator={}",
                 streamKey, userId, authentication.getName());
 
-        // TODO: Get actual IDs from repositories
-        Long streamId = 1L; // Placeholder
-        Long moderatorId = 1L; // Placeholder
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
 
-        moderationService.unbanUser(streamId, userId, moderatorId);
+        User moderator = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("Moderator not found"));
+
+        moderationService.unbanUser(stream.getId(), userId, moderator.getId());
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",
@@ -164,6 +179,11 @@ public class ModerationController {
         log.info("Delete message request: stream={}, messageId={}, moderator={}",
                 streamKey, messageId, authentication.getName());
 
+        // Verify stream existence even though deleteMessage handles logic
+        if (!streamRepository.existsByStreamKey(streamKey)) {
+             throw new ResourceNotFoundException("Stream not found");
+        }
+
         chatService.deleteMessage(messageId, authentication.getName());
 
         return ResponseEntity.ok(Map.of(
@@ -186,10 +206,11 @@ public class ModerationController {
 
         log.debug("Fetching moderation logs: stream={}", streamKey);
 
-        // TODO: Get actual stream ID
-        Long streamId = 1L; // Placeholder
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
         List<ModerationLog> logs = moderationLogRepository
-                .findByStreamIdOrderByCreatedAtDesc(streamId);
+                .findByStreamIdOrderByCreatedAtDesc(stream.getId());
 
         return ResponseEntity.ok(logs);
     }
@@ -207,9 +228,10 @@ public class ModerationController {
 
         log.debug("Fetching moderators: stream={}", streamKey);
 
-        // TODO: Get actual stream ID
-        Long streamId = 1L; // Placeholder
-        List<UserStreamRole> moderators = userStreamRoleRepository.findModerators(streamId);
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
+        List<UserStreamRole> moderators = userStreamRoleRepository.findModerators(stream.getId());
 
         return ResponseEntity.ok(moderators);
     }
@@ -234,7 +256,22 @@ public class ModerationController {
         log.info("Adding moderator: stream={}, user={}, by={}",
                 streamKey, username, authentication.getName());
 
-        // TODO: Implement add moderator logic
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
+
+        // Create new role
+        UserStreamRole role = UserStreamRole.builder()
+                .user(user)
+                .stream(stream)
+                .role(Role.ROLE_MODERATOR)
+                .grantedAt(java.time.LocalDateTime.now())
+                .grantedBy(userRepository.findByUsername(authentication.getName()).orElseThrow())
+                .build();
+
+        userStreamRoleRepository.save(role);
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",
@@ -261,11 +298,11 @@ public class ModerationController {
         log.info("Removing moderator: stream={}, userId={}, by={}",
                 streamKey, userId, authentication.getName());
 
-        // TODO: Get actual stream ID
-        Long streamId = 1L; // Placeholder
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
 
         userStreamRoleRepository.deleteByUserIdAndStreamIdAndRole(
-                userId, streamId, Role.ROLE_MODERATOR);
+                userId, stream.getId(), Role.ROLE_MODERATOR);
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",

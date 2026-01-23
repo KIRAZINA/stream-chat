@@ -204,6 +204,112 @@ class StreamServiceTest {
     }
 
     @Test
+    void updateStream_Success() {
+        // Arrange
+        String streamKey = "test-stream-key";
+        String username = "streamer";
+        String newTitle = "Updated Title";
+        String newDescription = "Updated Description";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(streamRepository.save(any(Stream.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Act
+        StreamDTO result = streamService.updateStream(streamKey, username, newTitle, newDescription);
+
+        // Assert
+        assertEquals(newTitle, result.getTitle());
+        assertEquals(newDescription, result.getDescription());
+        verify(streamRepository).save(any(Stream.class));
+    }
+
+    @Test
+    void updateStream_StreamNotFound_ThrowsException() {
+        // Arrange
+        String streamKey = "nonexistent-stream";
+        String username = "streamer";
+        String newTitle = "Updated Title";
+        String newDescription = "Updated Description";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.empty());
+
+        // Act & Assert
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                streamService.updateStream(streamKey, username, newTitle, newDescription));
+
+        assertEquals("Stream not found", exception.getMessage());
+    }
+
+    @Test
+    void updateStream_Unauthorized_ThrowsException() {
+        // Arrange
+        String streamKey = "test-stream-key";
+        String username = "other-user";
+        String newTitle = "Updated Title";
+        String newDescription = "Updated Description";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+
+        // Act & Assert
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                streamService.updateStream(streamKey, username, newTitle, newDescription));
+
+        assertEquals("Unauthorized", exception.getMessage());
+    }
+
+    @Test
+    void deleteStream_Success() {
+        // Arrange
+        String streamKey = "test-stream-key";
+        String username = "streamer";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+
+        // Act
+        streamService.deleteStream(streamKey, username);
+
+        // Assert
+        verify(streamRepository).delete(testStream);
+    }
+
+    @Test
+    void deleteStream_StreamNotFound_ThrowsException() {
+        // Arrange
+        String streamKey = "nonexistent-stream";
+        String username = "streamer";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.empty());
+
+        // Act & Assert
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                streamService.deleteStream(streamKey, username));
+
+        assertEquals("Stream not found", exception.getMessage());
+    }
+
+    @Test
+    void deleteStream_Unauthorized_ThrowsException() {
+        // Arrange
+        String streamKey = "test-stream-key";
+        String username = "other-user";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+
+        // Act & Assert
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                streamService.deleteStream(streamKey, username));
+
+        assertEquals("Unauthorized", exception.getMessage());
+    }
+
+    @Test
     void stopStream_Success() {
         // Arrange
         String streamKey = "test-stream-key";

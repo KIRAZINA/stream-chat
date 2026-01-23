@@ -92,8 +92,6 @@ Authorization: Bearer <JWT>
 
 ## Known limitations / TODO
 
-- Moderation and stream settings endpoints currently contain placeholders (`streamId = 1L`, `userId = 1L`, `moderatorId = 1L`) and need wiring to actual IDs.
-- Redis pub/sub channel naming is currently inconsistent (publisher uses `chat:messages:{streamKey}` while the subscriber container listens on `chat:messages`), so cross-instance message propagation may not work as intended.
 - If WebSocket messages are sent without a valid authenticated principal, handlers may fail (this should be guarded at the inbound interceptor level).
 
 ## Testing
@@ -107,7 +105,7 @@ This project contains 3 levels of tests:
 - **Integration tests (`@SpringBootTest`)** — `src/test/java/com/streamchat/integration`
   - Run against a real Spring context.
   - Use `dev` profile (H2 + `create-drop`, Redis auto-config excluded).
-  - Moderation integration tests focus on HTTP + security flow and use mocks for moderation services because of current placeholder IDs.
+  - Moderation integration tests focus on HTTP + security flow.
 
 ### Run all tests
 

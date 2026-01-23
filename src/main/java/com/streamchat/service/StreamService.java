@@ -116,6 +116,58 @@ public class StreamService {
     }
 
     /**
+     * Update stream details.
+     *
+     * @param streamKey   the stream key
+     * @param username    the username
+     * @param title       the new title
+     * @param description the new description
+     * @return updated stream DTO
+     */
+    @Transactional
+    public StreamDTO updateStream(String streamKey, String username, String title, String description) {
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new RuntimeException("Stream not found"));
+
+        // Verify ownership
+        if (!stream.getUser().getUsername().equals(username)) {
+            throw new RuntimeException("Unauthorized");
+        }
+
+        if (title != null) {
+            stream.setTitle(title);
+        }
+        if (description != null) {
+            stream.setDescription(description);
+        }
+
+        Stream saved = streamRepository.save(stream);
+        log.info("Stream updated: streamKey={}", streamKey);
+
+        return convertToDTO(saved);
+    }
+
+    /**
+     * Delete a stream.
+     *
+     * @param streamKey the stream key
+     * @param username  the username
+     */
+    @Transactional
+    public void deleteStream(String streamKey, String username) {
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new RuntimeException("Stream not found"));
+
+        // Verify ownership
+        if (!stream.getUser().getUsername().equals(username)) {
+            throw new RuntimeException("Unauthorized");
+        }
+
+        streamRepository.delete(stream);
+        log.info("Stream deleted: streamKey={}", streamKey);
+    }
+
+    /**
      * Get all live streams.
      *
      * @return list of live streams

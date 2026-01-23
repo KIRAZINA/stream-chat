@@ -101,8 +101,15 @@ public class StreamController {
 
         log.info("Updating stream: {}", streamKey);
 
-        // TODO: Implement stream update logic
-        StreamDTO stream = streamService.getStreamByKey(streamKey);
+        String title = request.get("title");
+        String description = request.get("description");
+
+        StreamDTO stream = streamService.updateStream(
+                streamKey,
+                authentication.getName(),
+                title,
+                description
+        );
 
         return ResponseEntity.ok(stream);
     }
@@ -169,7 +176,7 @@ public class StreamController {
 
         log.info("Deleting stream: {}", streamKey);
 
-        // TODO: Implement stream deletion logic
+        streamService.deleteStream(streamKey, authentication.getName());
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",
