@@ -676,21 +676,11 @@ class ModerationServiceTest {
         Long streamId = 1L;
         Long userId = 2L;
         Long moderatorId = 3L;
-        int duration = 0; // Edge case
+        int duration = 0; // Invalid
         String reason = "Warning";
 
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(timedOutUserRepository.save(any(TimedOutUser.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-        when(moderationLogRepository.save(any(ModerationLog.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
-        moderationService.timeoutUser(streamId, userId, moderatorId, duration, reason);
-
-        // Assert
-        verify(timedOutUserRepository, times(1)).save(any(TimedOutUser.class));
-        verify(valueOperations, times(1))
-                .set(eq("timeout:1:2"), eq("1"), eq(0L), eq(TimeUnit.SECONDS));
+        // Act & Assert
+        assertThrows(IllegalArgumentException.class, () ->
+                moderationService.timeoutUser(streamId, userId, moderatorId, duration, reason));
     }
 }

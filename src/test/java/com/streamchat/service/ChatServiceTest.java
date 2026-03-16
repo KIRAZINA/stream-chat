@@ -49,6 +49,9 @@ class ChatServiceTest {
     private ModerationService moderationService;
 
     @Mock
+    private StreamAuthorizationService streamAuthorizationService;
+
+    @Mock
     private RedisMessagePublisher redisMessagePublisher;
 
     @InjectMocks
@@ -347,7 +350,7 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(message));
         when(userRepository.findByUsername(deletedByUsername))
                 .thenReturn(Optional.of(moderator));
-        when(moderationService.canModerate(anyLong(), anyLong()))
+        when(streamAuthorizationService.canModerate(anyString(), anyString()))
                 .thenReturn(true);
         when(chatMessageRepository.save(any(ChatMessage.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -386,7 +389,7 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(message));
         when(userRepository.findByUsername(deletedByUsername))
                 .thenReturn(Optional.of(regularUser));
-        when(moderationService.canModerate(anyLong(), anyLong()))
+        when(streamAuthorizationService.canModerate(anyString(), anyString()))
                 .thenReturn(false);
 
         // Act & Assert
@@ -770,7 +773,7 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(message));
         when(userRepository.findByUsername(deletedByUsername))
                 .thenReturn(Optional.of(moderator));
-        when(moderationService.canModerate(anyLong(), anyLong()))
+        when(streamAuthorizationService.canModerate(anyString(), anyString()))
                 .thenReturn(true);
         when(chatMessageRepository.save(any(ChatMessage.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

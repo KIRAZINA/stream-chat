@@ -48,6 +48,9 @@ public class ModerationService {
     @Transactional
     public void timeoutUser(Long streamId, Long userId, Long moderatorId,
                             int durationSeconds, String reason) {
+        if (durationSeconds <= 0) {
+            throw new IllegalArgumentException("Timeout duration must be positive");
+        }
         LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(durationSeconds);
 
         TimedOutUser timeout = TimedOutUser.builder()
@@ -81,6 +84,9 @@ public class ModerationService {
     @Transactional
     public void banUser(Long streamId, Long userId, Long moderatorId,
                         boolean isPermanent, Integer durationSeconds, String reason) {
+        if (!isPermanent && (durationSeconds == null || durationSeconds <= 0)) {
+            throw new IllegalArgumentException("Ban duration must be positive for temporary bans");
+        }
         LocalDateTime expiresAt = isPermanent ? null :
                 LocalDateTime.now().plusSeconds(durationSeconds);
 
@@ -183,7 +189,10 @@ public class ModerationService {
 
         for (BlockedWord word : blockedWords) {
             if (word.getIsRegex()) {
-                if (lowerContent.matches(word.getWord())) {
+                if (java.util.regex.Pattern.compile(word.getWord(),
+                        java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(content)
+                        .find()) {
                     return true;
                 }
             } else {

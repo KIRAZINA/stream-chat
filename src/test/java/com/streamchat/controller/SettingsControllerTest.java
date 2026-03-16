@@ -2,8 +2,11 @@ package com.streamchat.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.streamchat.model.entity.StreamSettings;
+import com.streamchat.model.entity.Stream;
+import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.StreamSettingsRepository;
 import com.streamchat.security.JwtTokenProvider;
+import com.streamchat.service.StreamAuthorizationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -41,6 +44,12 @@ class SettingsControllerTest {
     private StreamSettingsRepository streamSettingsRepository;
 
     @MockBean
+    private StreamRepository streamRepository;
+
+    @MockBean
+    private StreamAuthorizationService streamAuthorizationService;
+
+    @MockBean
     private JwtTokenProvider jwtTokenProvider;
 
     @MockBean
@@ -48,6 +57,10 @@ class SettingsControllerTest {
 
     @Test
     void getSettings_success() throws Exception {
+        Stream stream = Stream.builder()
+                .id(1L)
+                .streamKey("stream-abc")
+                .build();
         StreamSettings settings = StreamSettings.builder()
                 .id(1L)
                 .slowModeEnabled(false)
@@ -60,6 +73,10 @@ class SettingsControllerTest {
                 .linkProtectionEnabled(true)
                 .build();
 
+        when(streamAuthorizationService.canManageSettings(eq("stream-abc"), eq("broadcaster")))
+                .thenReturn(true);
+        when(streamRepository.findByStreamKey(eq("stream-abc")))
+                .thenReturn(Optional.of(stream));
         when(streamSettingsRepository.findByStreamId(eq(1L)))
                 .thenReturn(Optional.of(settings));
 
@@ -74,6 +91,10 @@ class SettingsControllerTest {
 
     @Test
     void updateSettings_success() throws Exception {
+        Stream stream = Stream.builder()
+                .id(1L)
+                .streamKey("stream-abc")
+                .build();
         StreamSettings settings = StreamSettings.builder()
                 .id(1L)
                 .slowModeEnabled(false)
@@ -86,6 +107,10 @@ class SettingsControllerTest {
                 .linkProtectionEnabled(true)
                 .build();
 
+        when(streamAuthorizationService.canManageSettings(eq("stream-abc"), eq("broadcaster")))
+                .thenReturn(true);
+        when(streamRepository.findByStreamKey(eq("stream-abc")))
+                .thenReturn(Optional.of(stream));
         when(streamSettingsRepository.findByStreamId(eq(1L)))
                 .thenReturn(Optional.of(settings));
         when(streamSettingsRepository.save(any(StreamSettings.class)))

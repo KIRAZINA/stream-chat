@@ -8,6 +8,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.streamchat.repository.StreamRepository;
+import com.streamchat.repository.UserStreamRoleRepository;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -24,8 +25,12 @@ class SmokeIntegrationTest {
     @Autowired
     private StreamRepository streamRepository;
 
+    @Autowired
+    private UserStreamRoleRepository userStreamRoleRepository;
+
     @Test
     void publicEndpoint_streams_isReachable() throws Exception {
+        userStreamRoleRepository.deleteAll();
         streamRepository.deleteAll();
 
         mockMvc.perform(get("/api/streams"))

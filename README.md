@@ -20,25 +20,22 @@ A Spring Boot (Java 17) backend for a real-time chat system designed for live st
 - Redis (cache/pub-sub)
 - Flyway (database migrations)
 - OpenAPI (springdoc)
-- Docker + Docker Compose
 
 ## Prerequisites
 
 - Java 17+
 - Maven 3.9+ (or Maven Wrapper if you add it)
-- Docker (optional, for running with Compose)
 
 ## Configuration
 
 The app uses Spring profiles:
 
 - `dev` (default): H2 in-memory database (see `application-dev.properties`)
-- `docker`: PostgreSQL + Redis for running via Docker Compose (see `application-docker.properties`)
 - `prod`: configuration via environment variables (see `application-prod.properties`)
 
-### Environment variables (production / docker)
+### Environment variables (production)
 
-- `JWT_SECRET` (required in `docker` / `prod`) — **use a long secret (64+ chars)**
+- `JWT_SECRET` (required in `prod`) — **use a long secret (64+ chars)**
 - `JWT_EXPIRATION` (optional, default `86400000`)
 
 For `prod` profile:
@@ -49,6 +46,12 @@ For `prod` profile:
 - `REDIS_HOST`
 - `REDIS_PORT` (optional, default `6379`)
 - `REDIS_PASSWORD` (optional)
+- `CORS_ALLOWED_ORIGINS` (optional, comma-separated)
+
+### CORS
+
+Use `app.cors.allowed-origins` to control allowed origins.
+If set to `*`, credentials are disabled. If set to a list, credentials are enabled.
 
 ## API Overview
 
@@ -92,7 +95,7 @@ Authorization: Bearer <JWT>
 
 ## Known limitations / TODO
 
-- If WebSocket messages are sent without a valid authenticated principal, handlers may fail (this should be guarded at the inbound interceptor level).
+- None currently tracked.
 
 ## Testing
 
@@ -134,18 +137,6 @@ mvn spring-boot:run
 ```
 
 The application will start on `http://localhost:8080`.
-
-## Run with Docker Compose
-
-1. Start services:
-
-```bash
-docker compose up --build
-```
-
-2. The application will be available at `http://localhost:8080`.
-
-Note: `docker-compose.yml` contains development defaults (database credentials and a placeholder `JWT_SECRET`). Change them before any real deployment.
 
 ## API Documentation
 

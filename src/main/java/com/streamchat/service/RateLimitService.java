@@ -25,6 +25,7 @@ public class RateLimitService {
     private static final int DEFAULT_MAX_MESSAGES = 20;
     private static final int DEFAULT_WINDOW_SECONDS = 60;
     private static final String RATE_LIMIT_KEY = "ratelimit:";
+    private static final int CLEANUP_THRESHOLD = 10000;
 
     // In-memory fallback when Redis is not available
     private final Map<String, RateLimitEntry> inMemoryRateLimits = new ConcurrentHashMap<>();
@@ -100,6 +101,10 @@ public class RateLimitService {
         long now = System.currentTimeMillis();
         long windowStart = now - (windowSeconds * 1000L);
 
+        if (inMemoryRateLimits.size() > CLEANUP_THRESHOLD) {
+            cleanupExpiredEntries(windowSeconds);
+        }
+
         RateLimitEntry entry = inMemoryRateLimits.compute(key, (k, v) -> {
             if (v == null || v.getWindowStart() < windowStart) {
                 // New window
@@ -119,6 +124,11 @@ public class RateLimitService {
         }
 
         return allowed;
+    }
+
+    private void cleanupExpiredEntries(int windowSeconds) {
+        long cutoff = System.currentTimeMillis() - (windowSeconds * 1000L);
+        inMemoryRateLimits.entrySet().removeIf(e -> e.getValue().getWindowStart() < cutoff);
     }
 
     /**

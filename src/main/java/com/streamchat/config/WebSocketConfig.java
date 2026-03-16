@@ -69,35 +69,50 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+                if (accessor == null) {
+                    return message;
+                }
 
                 // Authenticate on CONNECT and preserve for all subsequent messages
-                if (StompCommand.CONNECT.equals(accessor.getCommand()) || 
-                    StompCommand.SEND.equals(accessor.getCommand()) ||
+                if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+                    authenticate(accessor);
+                    if (accessor.getUser() == null) {
+                        throw new SecurityException("WebSocket authentication required");
+                    }
+                }
+
+                if (StompCommand.SEND.equals(accessor.getCommand()) ||
                     StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
-                    
-                    // Get JWT token from Authorization header
-                    String authHeader = accessor.getFirstNativeHeader("Authorization");
-
-                    if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
-                        String token = authHeader.substring(7);
-
-                        if (tokenProvider.validateToken(token)) {
-                            String username = tokenProvider.getUsernameFromToken(token);
-                            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-
-                            UsernamePasswordAuthenticationToken authentication =
-                                    new UsernamePasswordAuthenticationToken(
-                                            userDetails,
-                                            null,
-                                            userDetails.getAuthorities()
-                                    );
-
-                            accessor.setUser(authentication);
-                        }
+                    if (accessor.getUser() == null) {
+                        authenticate(accessor);
+                    }
+                    if (accessor.getUser() == null) {
+                        throw new SecurityException("WebSocket authentication required");
                     }
                 }
 
                 return message;
+            }
+
+            private void authenticate(StompHeaderAccessor accessor) {
+                // Get JWT token from Authorization header
+                String authHeader = accessor.getFirstNativeHeader("Authorization");
+                if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+                    return;
+                }
+                String token = authHeader.substring(7);
+                if (!tokenProvider.validateToken(token)) {
+                    return;
+                }
+                String username = tokenProvider.getUsernameFromToken(token);
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+                accessor.setUser(authentication);
             }
         });
     }

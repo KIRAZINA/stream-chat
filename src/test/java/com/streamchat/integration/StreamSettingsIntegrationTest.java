@@ -9,6 +9,7 @@ import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.StreamSettingsRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserRoleRepository;
+import com.streamchat.repository.UserStreamRoleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,9 +46,13 @@ class StreamSettingsIntegrationTest {
     @Autowired
     private StreamSettingsRepository streamSettingsRepository;
 
+    @Autowired
+    private UserStreamRoleRepository userStreamRoleRepository;
+
     @BeforeEach
     void cleanup() {
         streamSettingsRepository.deleteAll();
+        userStreamRoleRepository.deleteAll();
         streamRepository.deleteAll();
         userRoleRepository.deleteAll();
         userRepository.deleteAll();

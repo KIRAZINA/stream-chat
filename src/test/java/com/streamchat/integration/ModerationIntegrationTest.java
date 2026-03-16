@@ -2,11 +2,14 @@ package com.streamchat.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.streamchat.model.entity.ModerationLog;
+import com.streamchat.model.entity.Stream;
 import com.streamchat.model.entity.User;
 import com.streamchat.model.entity.UserRole;
+import com.streamchat.model.entity.UserStreamRole;
 import com.streamchat.model.enums.ModerationActionType;
 import com.streamchat.model.enums.Role;
 import com.streamchat.repository.ModerationLogRepository;
+import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserRoleRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
@@ -52,6 +55,12 @@ class ModerationIntegrationTest {
     @Autowired
     private UserRoleRepository userRoleRepository;
 
+    @Autowired
+    private StreamRepository streamRepository;
+
+    @Autowired
+    private UserStreamRoleRepository userStreamRoleRepository;
+
     @MockBean
     private ModerationService moderationService;
 
@@ -61,11 +70,10 @@ class ModerationIntegrationTest {
     @MockBean
     private ModerationLogRepository moderationLogRepository;
 
-    @MockBean
-    private UserStreamRoleRepository userStreamRoleRepository;
-
     @BeforeEach
     void cleanup() {
+        userStreamRoleRepository.deleteAll();
+        streamRepository.deleteAll();
         userRoleRepository.deleteAll();
         userRepository.deleteAll();
     }
@@ -86,6 +94,8 @@ class ModerationIntegrationTest {
     void moderator_can_timeout_user() throws Exception {
         String token = registerLoginAndMakeModerator("mod", "mod@example.com", "password123");
 
+        User target = ensureUserExists("target", "target@example.com");
+
         mockMvc.perform(post("/api/streams/stream-abc/moderate/timeout")
                         .header("Authorization", "Bearer " + token)
                         .with(csrf())
@@ -97,12 +107,16 @@ class ModerationIntegrationTest {
                         ))))
                 .andExpect(status().isOk());
 
-        verify(moderationService).timeoutUser(eq(1L), eq(1L), eq(1L), eq(60), eq("spam"));
+        Long streamId = streamRepository.findByStreamKey("stream-abc").orElseThrow().getId();
+        Long moderatorId = userRepository.findByUsername("mod").orElseThrow().getId();
+        verify(moderationService).timeoutUser(eq(streamId), eq(target.getId()), eq(moderatorId), eq(60), eq("spam"));
     }
 
     @Test
     void moderator_can_ban_user() throws Exception {
         String token = registerLoginAndMakeModerator("mod", "mod@example.com", "password123");
+
+        User target = ensureUserExists("target", "target@example.com");
 
         mockMvc.perform(post("/api/streams/stream-abc/moderate/ban")
                         .header("Authorization", "Bearer " + token)
@@ -115,17 +129,20 @@ class ModerationIntegrationTest {
                         ))))
                 .andExpect(status().isOk());
 
-        verify(moderationService).banUser(eq(1L), eq(1L), eq(1L), eq(true), isNull(), eq("toxicity"));
+        Long streamId = streamRepository.findByStreamKey("stream-abc").orElseThrow().getId();
+        Long moderatorId = userRepository.findByUsername("mod").orElseThrow().getId();
+        verify(moderationService).banUser(eq(streamId), eq(target.getId()), eq(moderatorId), eq(true), isNull(), eq("toxicity"));
     }
 
     @Test
     void moderation_logs_endpoint_returns_200() throws Exception {
         String token = registerLoginAndMakeModerator("mod", "mod@example.com", "password123");
 
-        when(moderationLogRepository.findByStreamIdOrderByCreatedAtDesc(eq(1L)))
+        Long streamId = streamRepository.findByStreamKey("stream-abc").orElseThrow().getId();
+        when(moderationLogRepository.findByStreamIdOrderByCreatedAtDesc(eq(streamId)))
                 .thenReturn(List.of(ModerationLog.builder()
                         .id(1L)
-                        .streamId(1L)
+                        .streamId(streamId)
                         .moderatorId(1L)
                         .targetUserId(1L)
                         .actionType(ModerationActionType.BAN)
@@ -147,8 +164,14 @@ class ModerationIntegrationTest {
                         ))))
                 .andExpect(status().isCreated());
 
-        User u = userRepository.findByUsername(username).orElseThrow();
-        userRoleRepository.save(UserRole.builder().user(u).role(Role.ROLE_MODERATOR).build());
+        Stream stream = ensureStreamExists("stream-abc");
+        User user = userRepository.findByUsername(username).orElseThrow();
+
+        userStreamRoleRepository.save(UserStreamRole.builder()
+                .user(user)
+                .stream(stream)
+                .role(Role.ROLE_MODERATOR)
+                .build());
 
         MvcResult login = mockMvc.perform(post("/api/auth/login")
                         .with(csrf())
@@ -162,5 +185,28 @@ class ModerationIntegrationTest {
 
         String body = login.getResponse().getContentAsString();
         return body.split("\"token\":\"")[1].split("\"", 2)[0];
+    }
+
+    private Stream ensureStreamExists(String streamKey) {
+        return streamRepository.findByStreamKey(streamKey).orElseGet(() -> {
+            User owner = ensureUserExists("owner", "owner@example.com");
+            Stream stream = Stream.builder()
+                    .streamKey(streamKey)
+                    .user(owner)
+                    .isLive(true)
+                    .build();
+            return streamRepository.save(stream);
+        });
+    }
+
+    private User ensureUserExists(String username, String email) {
+        return userRepository.findByUsername(username).orElseGet(() ->
+                userRepository.save(User.builder()
+                        .username(username)
+                        .email(email)
+                        .passwordHash("encoded")
+                        .displayName(username)
+                        .isActive(true)
+                        .build()));
     }
 }

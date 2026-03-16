@@ -1,7 +1,9 @@
 package com.streamchat.controller;
 
 import com.streamchat.model.entity.StreamSettings;
+import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.StreamSettingsRepository;
+import com.streamchat.service.StreamAuthorizationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,7 +28,9 @@ import java.util.Map;
 @Tag(name = "Settings", description = "Stream settings endpoints")
 public class SettingsController {
 
+    private final StreamRepository streamRepository;
     private final StreamSettingsRepository streamSettingsRepository;
+    private final StreamAuthorizationService streamAuthorizationService;
 
     /**
      * Get stream settings.
@@ -36,11 +40,19 @@ public class SettingsController {
      */
     @GetMapping
     @Operation(summary = "Get stream settings")
-    public ResponseEntity<StreamSettings> getSettings(@PathVariable String streamKey) {
+    public ResponseEntity<StreamSettings> getSettings(
+            @PathVariable String streamKey,
+            Authentication authentication) {
         log.debug("Fetching settings for stream: {}", streamKey);
 
-        // TODO: Get actual stream ID
-        Long streamId = 1L; // Placeholder
+        if (authentication == null ||
+                !streamAuthorizationService.canManageSettings(streamKey, authentication.getName())) {
+            throw new com.streamchat.exception.UnauthorizedException("Insufficient permissions");
+        }
+
+        Long streamId = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new RuntimeException("Stream not found"))
+                .getId();
         StreamSettings settings = streamSettingsRepository.findByStreamId(streamId)
                 .orElseThrow(() -> new RuntimeException("Settings not found"));
 
@@ -56,7 +68,7 @@ public class SettingsController {
      * @return updated settings
      */
     @PutMapping
-    @PreAuthorize("hasRole('BROADCASTER')")
+    @PreAuthorize("@streamAuthorizationService.canManageSettings(#streamKey, authentication.name)")
     @Operation(summary = "Update stream settings")
     public ResponseEntity<StreamSettings> updateSettings(
             @PathVariable String streamKey,
@@ -65,8 +77,13 @@ public class SettingsController {
 
         log.info("Updating settings: stream={}, by={}", streamKey, authentication.getName());
 
-        // TODO: Get actual stream ID
-        Long streamId = 1L; // Placeholder
+        if (!streamAuthorizationService.canManageSettings(streamKey, authentication.getName())) {
+            throw new com.streamchat.exception.UnauthorizedException("Insufficient permissions");
+        }
+
+        Long streamId = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new RuntimeException("Stream not found"))
+                .getId();
         StreamSettings settings = streamSettingsRepository.findByStreamId(streamId)
                 .orElseThrow(() -> new RuntimeException("Settings not found"));
 

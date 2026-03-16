@@ -3,9 +3,13 @@ package com.streamchat.controller;
 import com.streamchat.model.dto.ChatMessageDTO;
 import com.streamchat.model.dto.ModerationActionDTO;
 import com.streamchat.model.enums.MessageType;
-import com.streamchat.model.enums.ModerationActionType;
+import com.streamchat.model.entity.Stream;
+import com.streamchat.model.entity.User;
+import com.streamchat.repository.StreamRepository;
+import com.streamchat.repository.UserRepository;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
+import com.streamchat.service.StreamAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -13,7 +17,6 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
@@ -30,6 +33,9 @@ public class ChatController {
     private final ChatService chatService;
     private final ModerationService moderationService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final StreamRepository streamRepository;
+    private final UserRepository userRepository;
+    private final StreamAuthorizationService streamAuthorizationService;
 
     /**
      * Handle incoming chat messages.
@@ -46,6 +52,11 @@ public class ChatController {
             @DestinationVariable String streamKey,
             @Payload ChatMessageDTO payload,
             Principal principal) {
+
+        if (principal == null) {
+            log.warn("Unauthenticated message attempt for stream {}", streamKey);
+            return null;
+        }
 
         log.debug("Received message for stream {}: {}", streamKey, payload.getContent());
 
@@ -94,6 +105,11 @@ public class ChatController {
             @DestinationVariable String streamKey,
             Principal principal) {
 
+        if (principal == null) {
+            log.warn("Unauthenticated join attempt for stream {}", streamKey);
+            return null;
+        }
+
         log.info("User joined chat: stream={}, user={}", streamKey, principal.getName());
 
         ChatMessageDTO joinMessage = ChatMessageDTO.builder()
@@ -116,6 +132,11 @@ public class ChatController {
     public ChatMessageDTO userLeave(
             @DestinationVariable String streamKey,
             Principal principal) {
+
+        if (principal == null) {
+            log.warn("Unauthenticated leave attempt for stream {}", streamKey);
+            return null;
+        }
 
         log.info("User left chat: stream={}, user={}", streamKey, principal.getName());
 
@@ -141,17 +162,38 @@ public class ChatController {
             @Payload ModerationActionDTO action,
             Principal principal) {
 
+        if (principal == null) {
+            log.warn("Unauthenticated moderation attempt for stream {}", streamKey);
+            return;
+        }
+
         log.info("Moderation action: stream={}, moderator={}, action={}, target={}",
                 streamKey, principal.getName(), action.getActionType(), action.getTargetUsername());
 
         try {
-            // TODO: Get stream and user IDs from service
-            Long streamId = 1L; // Placeholder
-            Long userId = 1L; // Placeholder
-            Long moderatorId = 1L; // Placeholder
+            if (!streamAuthorizationService.canModerate(streamKey, principal.getName())) {
+                throw new com.streamchat.exception.UnauthorizedException("Insufficient permissions");
+            }
+
+            Stream stream = streamRepository.findByStreamKey(streamKey)
+                    .orElseThrow(() -> new RuntimeException("Stream not found"));
+            User moderator = userRepository.findByUsername(principal.getName())
+                    .orElseThrow(() -> new RuntimeException("Moderator not found"));
+
+            Long streamId = stream.getId();
+            Long moderatorId = moderator.getId();
+            Long userId = null;
+            if (action.getTargetUsername() != null) {
+                User targetUser = userRepository.findByUsername(action.getTargetUsername())
+                        .orElseThrow(() -> new RuntimeException("User not found: " + action.getTargetUsername()));
+                userId = targetUser.getId();
+            }
 
             switch (action.getActionType()) {
                 case TIMEOUT:
+                    if (userId == null || action.getDurationSeconds() == null) {
+                        throw new IllegalArgumentException("Target user and duration are required");
+                    }
                     moderationService.timeoutUser(
                             streamId,
                             userId,
@@ -162,21 +204,31 @@ public class ChatController {
                     break;
 
                 case BAN:
+                    if (userId == null) {
+                        throw new IllegalArgumentException("Target user is required");
+                    }
+                    boolean isPermanent = action.getDurationSeconds() == null;
                     moderationService.banUser(
                             streamId,
                             userId,
                             moderatorId,
-                            true,
-                            null,
+                            isPermanent,
+                            action.getDurationSeconds(),
                             action.getReason()
                     );
                     break;
 
                 case UNBAN:
+                    if (userId == null) {
+                        throw new IllegalArgumentException("Target user is required");
+                    }
                     moderationService.unbanUser(streamId, userId, moderatorId);
                     break;
 
                 case DELETE_MESSAGE:
+                    if (action.getMessageId() == null) {
+                        throw new IllegalArgumentException("Message ID is required");
+                    }
                     chatService.deleteMessage(action.getMessageId(), principal.getName());
                     break;
 

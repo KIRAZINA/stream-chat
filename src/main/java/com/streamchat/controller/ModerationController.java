@@ -1,12 +1,10 @@
 package com.streamchat.controller;
 
 import com.streamchat.exception.ResourceNotFoundException;
-import com.streamchat.model.dto.ModerationActionDTO;
 import com.streamchat.model.entity.ModerationLog;
 import com.streamchat.model.entity.Stream;
 import com.streamchat.model.entity.User;
 import com.streamchat.model.entity.UserStreamRole;
-import com.streamchat.model.enums.ModerationActionType;
 import com.streamchat.model.enums.Role;
 import com.streamchat.repository.ModerationLogRepository;
 import com.streamchat.repository.StreamRepository;
@@ -55,7 +53,7 @@ public class ModerationController {
      * @return success response
      */
     @PostMapping("/timeout")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'BROADCASTER')")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
     @Operation(summary = "Timeout a user")
     public ResponseEntity<Map<String, String>> timeoutUser(
             @PathVariable String streamKey,
@@ -68,6 +66,9 @@ public class ModerationController {
         String targetUsername = (String) request.get("username");
         Integer duration = (Integer) request.get("durationSeconds");
         String reason = (String) request.get("reason");
+        if (duration == null || duration <= 0) {
+            throw new IllegalArgumentException("durationSeconds must be positive");
+        }
 
         Stream stream = streamRepository.findByStreamKey(streamKey)
                 .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
@@ -95,7 +96,7 @@ public class ModerationController {
      * @return success response
      */
     @PostMapping("/ban")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'BROADCASTER')")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
     @Operation(summary = "Ban a user")
     public ResponseEntity<Map<String, String>> banUser(
             @PathVariable String streamKey,
@@ -109,6 +110,9 @@ public class ModerationController {
         String reason = (String) request.get("reason");
         Boolean permanent = (Boolean) request.getOrDefault("permanent", true);
         Integer duration = (Integer) request.get("durationSeconds");
+        if (!Boolean.TRUE.equals(permanent) && (duration == null || duration <= 0)) {
+            throw new IllegalArgumentException("durationSeconds must be positive for temporary bans");
+        }
 
         Stream stream = streamRepository.findByStreamKey(streamKey)
                 .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
@@ -136,7 +140,7 @@ public class ModerationController {
      * @return success response
      */
     @DeleteMapping("/ban/{userId}")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'BROADCASTER')")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
     @Operation(summary = "Unban a user")
     public ResponseEntity<Map<String, String>> unbanUser(
             @PathVariable String streamKey,
@@ -169,7 +173,7 @@ public class ModerationController {
      * @return success response
      */
     @DeleteMapping("/messages/{messageId}")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'BROADCASTER')")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
     @Operation(summary = "Delete a message")
     public ResponseEntity<Map<String, String>> deleteMessage(
             @PathVariable String streamKey,
@@ -199,7 +203,7 @@ public class ModerationController {
      * @return list of moderation logs
      */
     @GetMapping("/logs")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'BROADCASTER')")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
     @Operation(summary = "Get moderation logs")
     public ResponseEntity<List<ModerationLog>> getModerationLogs(
             @PathVariable String streamKey) {
@@ -222,6 +226,7 @@ public class ModerationController {
      * @return list of moderators
      */
     @GetMapping("/moderators")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
     @Operation(summary = "Get list of moderators")
     public ResponseEntity<List<UserStreamRole>> getModerators(
             @PathVariable String streamKey) {
@@ -245,7 +250,7 @@ public class ModerationController {
      * @return success response
      */
     @PostMapping("/moderators")
-    @PreAuthorize("hasRole('BROADCASTER')")
+    @PreAuthorize("@streamAuthorizationService.canManageSettings(#streamKey, authentication.name)")
     @Operation(summary = "Add a moderator")
     public ResponseEntity<Map<String, String>> addModerator(
             @PathVariable String streamKey,
@@ -288,7 +293,7 @@ public class ModerationController {
      * @return success response
      */
     @DeleteMapping("/moderators/{userId}")
-    @PreAuthorize("hasRole('BROADCASTER')")
+    @PreAuthorize("@streamAuthorizationService.canManageSettings(#streamKey, authentication.name)")
     @Operation(summary = "Remove a moderator")
     public ResponseEntity<Map<String, String>> removeModerator(
             @PathVariable String streamKey,

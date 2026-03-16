@@ -34,6 +34,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final RateLimitService rateLimitService;
     private final ModerationService moderationService;
+    private final StreamAuthorizationService streamAuthorizationService;
 
     // Optional Redis dependencies - only available when Redis is configured
     @Autowired(required = false)
@@ -53,12 +54,14 @@ public class ChatService {
                        StreamRepository streamRepository,
                        UserRepository userRepository,
                        RateLimitService rateLimitService,
-                       ModerationService moderationService) {
+                       ModerationService moderationService,
+                       StreamAuthorizationService streamAuthorizationService) {
         this.chatMessageRepository = chatMessageRepository;
         this.streamRepository = streamRepository;
         this.userRepository = userRepository;
         this.rateLimitService = rateLimitService;
         this.moderationService = moderationService;
+        this.streamAuthorizationService = streamAuthorizationService;
     }
 
     /**
@@ -181,7 +184,9 @@ public class ChatService {
         User deletedBy = userRepository.findByUsername(deletedByUsername)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (!moderationService.canModerate(message.getStream().getId(), deletedBy.getId())) {
+        if (!streamAuthorizationService.canModerate(
+                message.getStream().getStreamKey(),
+                deletedBy.getUsername())) {
             throw new UnauthorizedException("Insufficient permissions to delete message");
         }
 
