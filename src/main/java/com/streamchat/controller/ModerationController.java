@@ -1,6 +1,9 @@
 package com.streamchat.controller;
 
 import com.streamchat.exception.ResourceNotFoundException;
+import com.streamchat.model.dto.AddModeratorRequest;
+import com.streamchat.model.dto.BanRequest;
+import com.streamchat.model.dto.TimeoutRequest;
 import com.streamchat.model.entity.ModerationLog;
 import com.streamchat.model.entity.Stream;
 import com.streamchat.model.entity.User;
@@ -15,9 +18,11 @@ import com.streamchat.service.ModerationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -39,6 +44,7 @@ public class ModerationController {
 
     private final ModerationService moderationService;
     private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
     private final UserRepository userRepository;
     private final StreamRepository streamRepository;
     private final ModerationLogRepository moderationLogRepository;
@@ -57,18 +63,15 @@ public class ModerationController {
     @Operation(summary = "Timeout a user")
     public ResponseEntity<Map<String, String>> timeoutUser(
             @PathVariable String streamKey,
-            @RequestBody Map<String, Object> request,
+            @Valid @RequestBody TimeoutRequest request,
             Authentication authentication) {
 
         log.info("Timeout request: stream={}, moderator={}",
                 streamKey, authentication.getName());
 
-        String targetUsername = (String) request.get("username");
-        Integer duration = (Integer) request.get("durationSeconds");
-        String reason = (String) request.get("reason");
-        if (duration == null || duration <= 0) {
-            throw new IllegalArgumentException("durationSeconds must be positive");
-        }
+        String targetUsername = request.getUsername();
+        Integer duration = request.getDurationSeconds();
+        String reason = request.getReason();
 
         Stream stream = streamRepository.findByStreamKey(streamKey)
                 .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
@@ -100,16 +103,19 @@ public class ModerationController {
     @Operation(summary = "Ban a user")
     public ResponseEntity<Map<String, String>> banUser(
             @PathVariable String streamKey,
-            @RequestBody Map<String, Object> request,
+            @Valid @RequestBody BanRequest request,
             Authentication authentication) {
 
         log.info("Ban request: stream={}, moderator={}",
                 streamKey, authentication.getName());
 
-        String targetUsername = (String) request.get("username");
-        String reason = (String) request.get("reason");
-        Boolean permanent = (Boolean) request.getOrDefault("permanent", true);
-        Integer duration = (Integer) request.get("durationSeconds");
+        String targetUsername = request.getUsername();
+        String reason = request.getReason();
+        Boolean permanent = request.getPermanent();
+        if (permanent == null) {
+            permanent = true;
+        }
+        Integer duration = request.getDurationSeconds();
         if (!Boolean.TRUE.equals(permanent) && (duration == null || duration <= 0)) {
             throw new IllegalArgumentException("durationSeconds must be positive for temporary bans");
         }
@@ -189,10 +195,57 @@ public class ModerationController {
         }
 
         chatService.deleteMessage(messageId, authentication.getName());
+        messagingTemplate.convertAndSend(
+                "/topic/stream/" + streamKey + "/moderation",
+                Map.of(
+                        "action", "DELETE_MESSAGE",
+                        "messageId", messageId,
+                        "deletedBy", authentication.getName()
+                )
+        );
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",
                 "message", "Message deleted"
+        ));
+    }
+
+    /**
+     * Delete all messages by a user in the stream.
+     *
+     * @param streamKey the stream identifier
+     * @param userId the user ID whose messages should be deleted
+     * @param authentication current moderator
+     * @return success response
+     */
+    @DeleteMapping("/messages/user/{userId}")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
+    @Operation(summary = "Delete all messages by a user")
+    public ResponseEntity<Map<String, Object>> deleteUserMessages(
+            @PathVariable String streamKey,
+            @PathVariable Long userId,
+            Authentication authentication) {
+
+        log.info("Bulk delete messages request: stream={}, userId={}, moderator={}",
+                streamKey, userId, authentication.getName());
+
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
+        int deletedCount = chatService.deleteMessagesByUser(stream.getId(), userId, authentication.getName());
+        messagingTemplate.convertAndSend(
+                "/topic/stream/" + streamKey + "/moderation",
+                Map.of(
+                        "action", "DELETE_USER_MESSAGES",
+                        "targetUserId", userId,
+                        "deletedBy", authentication.getName(),
+                        "deletedCount", deletedCount
+                )
+        );
+
+        return ResponseEntity.ok(Map.of(
+                "status", "success",
+                "deletedCount", deletedCount
         ));
     }
 
@@ -254,10 +307,10 @@ public class ModerationController {
     @Operation(summary = "Add a moderator")
     public ResponseEntity<Map<String, String>> addModerator(
             @PathVariable String streamKey,
-            @RequestBody Map<String, String> request,
+            @Valid @RequestBody AddModeratorRequest request,
             Authentication authentication) {
 
-        String username = request.get("username");
+        String username = request.getUsername();
         log.info("Adding moderator: stream={}, user={}, by={}",
                 streamKey, username, authentication.getName());
 

@@ -58,15 +58,24 @@ public class SecurityConfig {
                         // Public endpoints
                         .requestMatchers(
                                 "/",
+                                "/index.html",
+                                "/static/**",
+                                "/css/**",
+                                "/js/**",
+                                "/images/**",
+                                "/favicon.ico",
+                                "/chat-test.html",
                                 "/api/auth/**",
                                 "/ws-chat/**",
                                 "/api/streams",
                                 "/api/streams/*",
+                                "/api/streams/*/messages",
+                                "/api/streams/*/presence",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/h2-console/**",
-                                "/actuator/health"
+                                "/actuator/**"
                         ).permitAll()
 
                         // Authenticated endpoints

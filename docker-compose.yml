@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  stream-chat-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stream-chat-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/stream_chat_db
+      SPRING_DATASOURCE_USERNAME: stream_chat_user
+      SPRING_DATASOURCE_PASSWORD: secure_password_123
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQL10Dialect
+      JWT_SECRET: ${JWT_SECRET:-super-secret-key-change-in-production-must-be-64-chars-minimum-length}
+      JWT_EXPIRATION: 86400000
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:8080
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - stream-chat-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/streams"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: stream-chat-postgres
+    environment:
+      POSTGRES_DB: stream_chat_db
+      POSTGRES_USER: stream_chat_user
+      POSTGRES_PASSWORD: secure_password_123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-storage:/var/lib/postgresql/data
+    networks:
+      - stream-chat-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stream_chat_user -d stream_chat_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: stream-chat-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-storage:/data
+    command: redis-server --appendonly yes
+    networks:
+      - stream-chat-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-storage:
+  redis-storage:
+
+networks:
+  stream-chat-network:
+    driver: bridge

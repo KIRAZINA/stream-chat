@@ -1,8 +1,10 @@
 package com.streamchat.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.streamchat.model.dto.ChatHistoryResponse;
 import com.streamchat.model.dto.StreamDTO;
 import com.streamchat.security.JwtTokenProvider;
+import com.streamchat.service.ChatService;
 import com.streamchat.service.StreamService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,9 @@ class StreamControllerTest {
     private StreamService streamService;
 
     @MockBean
+    private ChatService chatService;
+
+    @MockBean
     private JwtTokenProvider jwtTokenProvider;
 
     @MockBean
@@ -72,6 +77,31 @@ class StreamControllerTest {
                 .andExpect(jsonPath("$.streamKey").value("stream-abc"));
 
         verify(streamService).getStreamByKey(eq("stream-abc"));
+    }
+
+    @Test
+    void getChatHistory_success() throws Exception {
+        when(chatService.getMessageHistory(eq("stream-abc"), eq(42L), eq(20)))
+                .thenReturn(ChatHistoryResponse.builder()
+                        .messages(List.of(
+                                com.streamchat.model.dto.ChatMessageDTO.builder().id(50L).content("newer").build(),
+                                com.streamchat.model.dto.ChatMessageDTO.builder().id(49L).content("older").build()
+                        ))
+                        .hasMore(true)
+                        .nextCursor(49L)
+                        .build());
+
+        mockMvc.perform(get("/api/streams/stream-abc/messages")
+                        .param("before", "42")
+                        .param("limit", "20")
+                        .with(user("viewer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages[0].id").value(50))
+                .andExpect(jsonPath("$.messages[1].content").value("older"))
+                .andExpect(jsonPath("$.hasMore").value(true))
+                .andExpect(jsonPath("$.nextCursor").value(49));
+
+        verify(chatService).getMessageHistory(eq("stream-abc"), eq(42L), eq(20));
     }
 
     @Test

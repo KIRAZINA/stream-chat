@@ -27,15 +27,18 @@ public class RedisMessagePublisher {
      *
      * @param streamKey the stream identifier
      * @param message the message to publish
+     * @return true if the message was handed off to Redis successfully
      */
-    public void publish(String streamKey, ChatMessageDTO message) {
+    public boolean publish(String streamKey, ChatMessageDTO message) {
         try {
             String channel = chatTopic.getTopic() + ":" + streamKey;
             redisTemplate.convertAndSend(channel, message);
-            log.debug("Published message to Redis: channel={}, messageId={}",
-                    channel, message.getId());
+            Long messageId = message != null ? message.getId() : null;
+            log.debug("Published message to Redis: channel={}, messageId={}", channel, messageId);
+            return true;
         } catch (Exception e) {
             log.error("Failed to publish message to Redis: {}", e.getMessage(), e);
+            return false;
         }
     }
 }

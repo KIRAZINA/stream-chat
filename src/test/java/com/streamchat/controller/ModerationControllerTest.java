@@ -12,6 +12,7 @@ import com.streamchat.repository.UserStreamRoleRepository;
 import com.streamchat.security.JwtTokenProvider;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
+import com.streamchat.service.StreamAuthorizationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -64,10 +66,16 @@ class ModerationControllerTest {
     private UserStreamRoleRepository userStreamRoleRepository;
 
     @MockBean
+    private StreamAuthorizationService streamAuthorizationService;
+
+    @MockBean
     private JwtTokenProvider jwtTokenProvider;
 
     @MockBean
     private UserDetailsService userDetailsService;
+
+    @MockBean
+    private SimpMessagingTemplate messagingTemplate;
 
     private Stream testStream;
     private User testModerator;
@@ -94,6 +102,8 @@ class ModerationControllerTest {
     @Test
     void deleteMessage_success() throws Exception {
         when(streamRepository.existsByStreamKey("stream-abc")).thenReturn(true);
+        when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
+        when(streamAuthorizationService.canModerate("stream-abc", "mod")).thenReturn(true);
 
         mockMvc.perform(delete("/api/streams/stream-abc/moderate/messages/123")
                         .with(user("mod").roles("MODERATOR"))
@@ -109,6 +119,7 @@ class ModerationControllerTest {
         when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
         when(userRepository.findByUsername("mod")).thenReturn(Optional.of(testModerator));
         when(userRepository.findByUsername("target")).thenReturn(Optional.of(testTargetUser));
+        when(streamAuthorizationService.canModerate("stream-abc", "mod")).thenReturn(true);
 
         mockMvc.perform(post("/api/streams/stream-abc/moderate/timeout")
                         .with(user("mod").roles("MODERATOR"))
@@ -130,6 +141,7 @@ class ModerationControllerTest {
         when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
         when(userRepository.findByUsername("mod")).thenReturn(Optional.of(testModerator));
         when(userRepository.findByUsername("target")).thenReturn(Optional.of(testTargetUser));
+        when(streamAuthorizationService.canModerate("stream-abc", "mod")).thenReturn(true);
 
         mockMvc.perform(post("/api/streams/stream-abc/moderate/ban")
                         .with(user("mod").roles("MODERATOR"))
@@ -150,6 +162,7 @@ class ModerationControllerTest {
     void unbanUser_success() throws Exception {
         when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
         when(userRepository.findByUsername("mod")).thenReturn(Optional.of(testModerator));
+        when(streamAuthorizationService.canModerate("stream-abc", "mod")).thenReturn(true);
 
         mockMvc.perform(delete("/api/streams/stream-abc/moderate/ban/2")
                         .with(user("mod").roles("MODERATOR"))
@@ -165,6 +178,7 @@ class ModerationControllerTest {
         when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
         when(moderationLogRepository.findByStreamIdOrderByCreatedAtDesc(eq(1L)))
                 .thenReturn(List.of(ModerationLog.builder().id(1L).build()));
+        when(streamAuthorizationService.canModerate("stream-abc", "mod")).thenReturn(true);
 
         mockMvc.perform(get("/api/streams/stream-abc/moderate/logs")
                         .with(user("mod").roles("MODERATOR")))
@@ -179,6 +193,7 @@ class ModerationControllerTest {
         when(streamRepository.findByStreamKey("stream-abc")).thenReturn(Optional.of(testStream));
         when(userStreamRoleRepository.findModerators(eq(1L)))
                 .thenReturn(List.of(UserStreamRole.builder().id(1L).build()));
+        when(streamAuthorizationService.canModerate("stream-abc", "mod")).thenReturn(true);
 
         mockMvc.perform(get("/api/streams/stream-abc/moderate/moderators")
                         .with(user("mod").roles("MODERATOR")))

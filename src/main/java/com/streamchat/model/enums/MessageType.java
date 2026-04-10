@@ -9,5 +9,6 @@ public enum MessageType {
     JOIN,           // User joined chat
     LEAVE,          // User left chat
     ERROR,          // Error message
-    MODERATION      // Moderation action notification
+    MODERATION,     // Moderation action notification
+    DELETED         // Deleted message tombstone
 }

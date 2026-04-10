@@ -1,10 +1,16 @@
 package com.streamchat.controller;
 
+import com.streamchat.model.dto.ChatHistoryResponse;
 import com.streamchat.model.dto.StreamDTO;
+import com.streamchat.model.dto.StreamPresenceResponse;
+import com.streamchat.model.dto.StreamRequest;
+import com.streamchat.service.ChatService;
+import com.streamchat.service.PresenceService;
 import com.streamchat.service.StreamService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -27,6 +33,8 @@ import java.util.Map;
 public class StreamController {
 
     private final StreamService streamService;
+    private final ChatService chatService;
+    private final PresenceService presenceService;
 
     /**
      * Get all live streams.
@@ -56,6 +64,45 @@ public class StreamController {
     }
 
     /**
+     * Get paginated chat history for a stream.
+     *
+     * @param streamKey the stream key
+     * @param before optional cursor for older messages
+     * @param limit page size
+     * @return paginated message history
+     */
+    @GetMapping("/{streamKey}/messages")
+    @Operation(summary = "Get chat history for a stream")
+    public ResponseEntity<ChatHistoryResponse> getChatHistory(
+            @PathVariable String streamKey,
+            @RequestParam(required = false) Long before,
+            @RequestParam(defaultValue = "50") Integer limit,
+            @RequestParam(defaultValue = "false") boolean includeDeleted) {
+
+        log.debug("Fetching chat history: stream={}, before={}, limit={}, includeDeleted={}", streamKey, before, limit, includeDeleted);
+        ChatHistoryResponse history = chatService.getMessageHistory(streamKey, before, limit, includeDeleted);
+        return ResponseEntity.ok(history);
+    }
+
+    /**
+     * Get active presence count for a stream.
+     *
+     * @param streamKey the stream identifier
+     */
+    @GetMapping("/{streamKey}/presence")
+    @Operation(summary = "Get active viewer presence for a stream")
+    public ResponseEntity<StreamPresenceResponse> getStreamPresence(
+            @PathVariable String streamKey) {
+
+        log.debug("Fetching stream presence: {}", streamKey);
+        StreamPresenceResponse presence = StreamPresenceResponse.builder()
+                .activeViewers(presenceService.getActiveViewers(streamKey))
+                .build();
+
+        return ResponseEntity.ok(presence);
+    }
+
+    /**
      * Create a new stream.
      *
      * @param request stream creation details
@@ -66,18 +113,15 @@ public class StreamController {
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Create a new stream")
     public ResponseEntity<StreamDTO> createStream(
-            @RequestBody Map<String, String> request,
+            @Valid @RequestBody StreamRequest request,
             Authentication authentication) {
 
         log.info("Creating stream for user: {}", authentication.getName());
 
-        String title = request.get("title");
-        String description = request.get("description");
-
         StreamDTO stream = streamService.createStream(
                 authentication.getName(),
-                title,
-                description
+                request.getTitle(),
+                request.getDescription()
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(stream);
@@ -96,19 +140,16 @@ public class StreamController {
     @Operation(summary = "Update stream")
     public ResponseEntity<StreamDTO> updateStream(
             @PathVariable String streamKey,
-            @RequestBody Map<String, String> request,
+            @Valid @RequestBody StreamRequest request,
             Authentication authentication) {
 
         log.info("Updating stream: {}", streamKey);
 
-        String title = request.get("title");
-        String description = request.get("description");
-
         StreamDTO stream = streamService.updateStream(
                 streamKey,
                 authentication.getName(),
-                title,
-                description
+                request.getTitle(),
+                request.getDescription()
         );
 
         return ResponseEntity.ok(stream);

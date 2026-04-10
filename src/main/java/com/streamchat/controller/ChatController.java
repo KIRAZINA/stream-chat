@@ -9,9 +9,11 @@ import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
+import com.streamchat.service.RedisMessagePublisher;
 import com.streamchat.service.StreamAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -36,6 +38,7 @@ public class ChatController {
     private final StreamRepository streamRepository;
     private final UserRepository userRepository;
     private final StreamAuthorizationService streamAuthorizationService;
+    private final ObjectProvider<RedisMessagePublisher> redisMessagePublisherProvider;
 
     /**
      * Handle incoming chat messages.
@@ -44,40 +47,37 @@ public class ChatController {
      * @param streamKey the stream identifier
      * @param payload the message content
      * @param principal the authenticated user
-     * @return the saved message
      */
     @MessageMapping("/chat.send/{streamKey}")
-    @SendTo("/topic/stream/{streamKey}")
-    public ChatMessageDTO sendMessage(
+    public void sendMessage(
             @DestinationVariable String streamKey,
             @Payload ChatMessageDTO payload,
             Principal principal) {
 
         if (principal == null) {
             log.warn("Unauthenticated message attempt for stream {}", streamKey);
-            return null;
+            return;
         }
 
         log.debug("Received message for stream {}: {}", streamKey, payload.getContent());
 
         try {
-            // Process and save message
             ChatMessageDTO message = chatService.sendMessage(
                     streamKey,
                     principal.getName(),
                     payload.getContent(),
-                    MessageType.CHAT
+                    MessageType.CHAT,
+                    payload.getReplyToMessageId()
             );
 
             log.info("Message sent: stream={}, user={}, messageId={}",
                     streamKey, principal.getName(), message.getId());
 
-            return message;
+            broadcastMessage(streamKey, message);
 
         } catch (Exception e) {
             log.error("Error sending message: {}", e.getMessage(), e);
 
-            // Send error message back to user
             ChatMessageDTO errorMessage = ChatMessageDTO.builder()
                     .messageType(MessageType.ERROR)
                     .content(e.getMessage())
@@ -88,9 +88,16 @@ public class ChatController {
                     "/queue/errors",
                     errorMessage
             );
-
-            return null;
         }
+    }
+
+    private void broadcastMessage(String streamKey, ChatMessageDTO message) {
+        RedisMessagePublisher redisMessagePublisher = redisMessagePublisherProvider.getIfAvailable();
+        if (redisMessagePublisher != null && redisMessagePublisher.publish(streamKey, message)) {
+            return;
+        }
+
+        messagingTemplate.convertAndSend("/topic/stream/" + streamKey, message);
     }
 
     /**
@@ -237,7 +244,6 @@ public class ChatController {
                     return;
             }
 
-            // Broadcast moderation action to all clients
             messagingTemplate.convertAndSend(
                     "/topic/stream/" + streamKey + "/moderation",
                     action
@@ -246,7 +252,6 @@ public class ChatController {
         } catch (Exception e) {
             log.error("Error performing moderation action: {}", e.getMessage(), e);
 
-            // Send error back to moderator
             messagingTemplate.convertAndSendToUser(
                     principal.getName(),
                     "/queue/errors",

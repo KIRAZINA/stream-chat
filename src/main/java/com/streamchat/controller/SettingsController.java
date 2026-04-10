@@ -1,5 +1,6 @@
 package com.streamchat.controller;
 
+import com.streamchat.model.dto.StreamSettingsUpdateRequest;
 import com.streamchat.model.entity.StreamSettings;
 import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.StreamSettingsRepository;
@@ -7,14 +8,13 @@ import com.streamchat.service.StreamAuthorizationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 /**
  * REST controller for stream chat settings.
@@ -72,7 +72,7 @@ public class SettingsController {
     @Operation(summary = "Update stream settings")
     public ResponseEntity<StreamSettings> updateSettings(
             @PathVariable String streamKey,
-            @RequestBody Map<String, Object> request,
+            @Valid @RequestBody StreamSettingsUpdateRequest request,
             Authentication authentication) {
 
         log.info("Updating settings: stream={}, by={}", streamKey, authentication.getName());
@@ -88,29 +88,32 @@ public class SettingsController {
                 .orElseThrow(() -> new RuntimeException("Settings not found"));
 
         // Update settings
-        if (request.containsKey("slowModeEnabled")) {
-            settings.setSlowModeEnabled((Boolean) request.get("slowModeEnabled"));
+        if (request.getSlowModeEnabled() != null) {
+            settings.setSlowModeEnabled(request.getSlowModeEnabled());
         }
-        if (request.containsKey("slowModeSeconds")) {
-            settings.setSlowModeSeconds((Integer) request.get("slowModeSeconds"));
+        if (request.getSlowModeSeconds() != null) {
+            settings.setSlowModeSeconds(request.getSlowModeSeconds());
         }
-        if (request.containsKey("followersOnlyMode")) {
-            settings.setFollowersOnlyMode((Boolean) request.get("followersOnlyMode"));
+        if (request.getFollowersOnlyMode() != null) {
+            settings.setFollowersOnlyMode(request.getFollowersOnlyMode());
         }
-        if (request.containsKey("subscribersOnlyMode")) {
-            settings.setSubscribersOnlyMode((Boolean) request.get("subscribersOnlyMode"));
+        if (request.getFollowersOnlyDurationMinutes() != null) {
+            settings.setFollowersOnlyDurationMinutes(request.getFollowersOnlyDurationMinutes());
         }
-        if (request.containsKey("emoteOnlyMode")) {
-            settings.setEmoteOnlyMode((Boolean) request.get("emoteOnlyMode"));
+        if (request.getSubscribersOnlyMode() != null) {
+            settings.setSubscribersOnlyMode(request.getSubscribersOnlyMode());
         }
-        if (request.containsKey("maxMessageLength")) {
-            settings.setMaxMessageLength((Integer) request.get("maxMessageLength"));
+        if (request.getEmoteOnlyMode() != null) {
+            settings.setEmoteOnlyMode(request.getEmoteOnlyMode());
         }
-        if (request.containsKey("profanityFilterEnabled")) {
-            settings.setProfanityFilterEnabled((Boolean) request.get("profanityFilterEnabled"));
+        if (request.getMaxMessageLength() != null) {
+            settings.setMaxMessageLength(request.getMaxMessageLength());
         }
-        if (request.containsKey("linkProtectionEnabled")) {
-            settings.setLinkProtectionEnabled((Boolean) request.get("linkProtectionEnabled"));
+        if (request.getProfanityFilterEnabled() != null) {
+            settings.setProfanityFilterEnabled(request.getProfanityFilterEnabled());
+        }
+        if (request.getLinkProtectionEnabled() != null) {
+            settings.setLinkProtectionEnabled(request.getLinkProtectionEnabled());
         }
 
         StreamSettings updated = streamSettingsRepository.save(settings);

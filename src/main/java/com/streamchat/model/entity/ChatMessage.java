@@ -38,6 +38,9 @@ public class ChatMessage {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "reply_to_message_id")
+    private Long replyToMessageId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "message_type", length = 20)
     @Builder.Default

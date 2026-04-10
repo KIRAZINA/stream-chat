@@ -3,6 +3,7 @@ package com.streamchat.repository;
 import com.streamchat.model.entity.ChatMessage;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -22,6 +23,30 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
      * @return list of recent messages
      */
     List<ChatMessage> findTop100ByStreamIdAndIsDeletedFalseOrderByCreatedAtDesc(Long streamId);
+
+    /**
+     * Find a page of recent messages for a stream ordered newest first.
+     */
+    List<ChatMessage> findByStreamIdAndIsDeletedFalseOrderByIdDesc(Long streamId, Pageable pageable);
+
+    /**
+     * Find a page of recent messages for a stream ordered newest first, including deleted tombstones.
+     */
+    List<ChatMessage> findByStreamIdOrderByIdDesc(Long streamId, Pageable pageable);
+
+    /**
+     * Find a page of older messages for a stream before a specific message id.
+     */
+    List<ChatMessage> findByStreamIdAndIsDeletedFalseAndIdLessThanOrderByIdDesc(Long streamId,
+                                                                                 Long beforeMessageId,
+                                                                                 Pageable pageable);
+
+    /**
+     * Find a page of older messages for a stream before a specific message id, including deleted tombstones.
+     */
+    List<ChatMessage> findByStreamIdAndIdLessThanOrderByIdDesc(Long streamId,
+                                                               Long beforeMessageId,
+                                                               Pageable pageable);
 
     /**
      * Find messages by user in a stream.

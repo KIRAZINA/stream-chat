@@ -267,6 +267,32 @@ class EmoteServiceTest {
     }
 
     @Test
+    void buildMessageFragments_WithEmoteFragments_Success() {
+        Long streamId = 1L;
+        String message = "Hello :smile: world";
+
+        Emote emote = Emote.builder()
+                .id(1L)
+                .code("smile")
+                .imageUrl("https://example.com/smile.png")
+                .isGlobal(true)
+                .build();
+
+        when(emoteRepository.findByStreamIdOrGlobal(streamId))
+                .thenReturn(List.of(emote));
+
+        var fragments = emoteService.buildMessageFragments(streamId, message);
+
+        assertNotNull(fragments);
+        assertEquals(3, fragments.size());
+        assertEquals("Hello ", fragments.get(0).getText());
+        assertEquals("smile", fragments.get(1).getEmoteCode());
+        assertEquals("https://example.com/smile.png", fragments.get(1).getImageUrl());
+        assertEquals(" world", fragments.get(2).getText());
+        assertEquals("EMOTE", fragments.get(1).getType().name());
+    }
+
+    @Test
     void parseEmotes_SpecialCharactersInMessage() {
         // Arrange
         Long streamId = 1L;
