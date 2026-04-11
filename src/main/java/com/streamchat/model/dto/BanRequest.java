@@ -21,6 +21,7 @@ public class BanRequest {
     @NotBlank(message = "Username is required")
     private String username;
 
+    @Builder.Default
     private Boolean permanent = true;
 
     @Min(value = 1, message = "Duration seconds must be positive for temporary bans")

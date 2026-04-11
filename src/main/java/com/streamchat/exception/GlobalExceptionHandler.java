@@ -1,5 +1,6 @@
 package com.streamchat.exception;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +19,7 @@ import java.util.Map;
  * Global exception handler for all REST controllers.
  * Provides consistent error responses across the application.
  */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.streamchat.controller")
 @Slf4j
 public class GlobalExceptionHandler {
 

@@ -3,9 +3,11 @@ package com.streamchat.scheduled;
 import com.streamchat.model.entity.BannedUser;
 import com.streamchat.model.entity.TimedOutUser;
 import com.streamchat.repository.BannedUserRepository;
+import com.streamchat.repository.ChatMessageRepository;
 import com.streamchat.repository.TimedOutUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,10 @@ public class ScheduledTasks {
 
     private final BannedUserRepository bannedUserRepository;
     private final TimedOutUserRepository timedOutUserRepository;
+    private final ChatMessageRepository chatMessageRepository;
+
+    @Value("${app.chat.retention-days:90}")
+    private int retentionDays;
 
     /**
      * Clean up expired timeouts.
@@ -54,6 +60,22 @@ public class ScheduledTasks {
         if (!expired.isEmpty()) {
             bannedUserRepository.deleteAll(expired);
             log.info("Cleaned up {} expired bans", expired.size());
+        }
+    }
+
+    /**
+     * Clean up old chat messages based on retention policy.
+     * Runs daily at 3 AM.
+     */
+    @Scheduled(cron = "0 0 3 * * *") // Daily at 3:00 AM
+    @Transactional
+    public void cleanupOldMessages() {
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+        long countBefore = chatMessageRepository.countMessagesOlderThan(cutoff);
+
+        if (countBefore > 0) {
+            int deleted = chatMessageRepository.deleteMessagesOlderThan(cutoff);
+            log.info("Retention cleanup: deleted {} messages older than {} days", deleted, retentionDays);
         }
     }
 }

@@ -26,6 +26,7 @@ public class ModerationService {
     private final ModerationLogRepository moderationLogRepository;
     private final UserStreamRoleRepository userStreamRoleRepository;
     private final BlockedWordRepository blockedWordRepository;
+    private final MetricsService metricsService;
 
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
@@ -37,12 +38,14 @@ public class ModerationService {
                              TimedOutUserRepository timedOutUserRepository,
                              ModerationLogRepository moderationLogRepository,
                              UserStreamRoleRepository userStreamRoleRepository,
-                             BlockedWordRepository blockedWordRepository) {
+                             BlockedWordRepository blockedWordRepository,
+                             MetricsService metricsService) {
         this.bannedUserRepository = bannedUserRepository;
         this.timedOutUserRepository = timedOutUserRepository;
         this.moderationLogRepository = moderationLogRepository;
         this.userStreamRoleRepository = userStreamRoleRepository;
         this.blockedWordRepository = blockedWordRepository;
+        this.metricsService = metricsService;
     }
 
     @Transactional
@@ -76,6 +79,8 @@ public class ModerationService {
 
         logModerationAction(streamId, moderatorId, userId,
                 ModerationActionType.TIMEOUT, reason, durationSeconds);
+
+        metricsService.recordModerationAction("timeout");
 
         log.info("User timed out: streamId={}, userId={}, duration={}s",
                 streamId, userId, durationSeconds);
@@ -119,6 +124,8 @@ public class ModerationService {
         logModerationAction(streamId, moderatorId, userId,
                 ModerationActionType.BAN, reason, durationSeconds);
 
+        metricsService.recordModerationAction("ban");
+
         log.info("User banned: streamId={}, userId={}, permanent={}",
                 streamId, userId, isPermanent);
     }
@@ -126,6 +133,8 @@ public class ModerationService {
     @Transactional
     public void unbanUser(Long streamId, Long userId, Long moderatorId) {
         bannedUserRepository.deleteByStreamIdAndUserId(streamId, userId);
+
+        metricsService.recordModerationAction("unban");
 
         // Remove from cache if Redis is available
         if (redisTemplate != null) {

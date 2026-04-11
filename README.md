@@ -57,6 +57,24 @@ For `prod` profile:
 Use `app.cors.allowed-origins` to control allowed origins.
 If set to `*`, credentials are disabled. If set to a list, credentials are enabled.
 
+## Frontend
+
+The application includes a built-in chat client:
+
+- **Main chat client**: `http://localhost:8080/chat.html` — Full-featured chat UI with login, stream join, chat history, reconnect, and moderation support
+- **Legacy test page**: `http://localhost:8080/chat-test.html` — Simple WebSocket test page (deprecated)
+
+### Chat Client Features
+
+- **Authentication**: Login or register directly in the UI
+- **Stream Join**: Enter a stream key to join the chat
+- **Chat History**: Loads recent messages on join (paginated)
+- **Reconnect**: Automatically reconnects on connection loss
+- **Message Deletion**: Updates UI in real-time when messages are deleted
+- **Moderator Actions**: Delete messages (if user is a moderator)
+- **Badges**: Display user roles (broadcaster, moderator, subscriber, follower)
+- **Emotes**: Structured emote rendering
+
 ## API Overview
 
 ### REST endpoints

@@ -7,5 +7,7 @@ public enum Role {
     ROLE_USER,
     ROLE_MODERATOR,
     ROLE_BROADCASTER,
-    ROLE_ADMIN
+    ROLE_ADMIN,
+    ROLE_VIP,
+    ROLE_SUBSCRIBER
 }

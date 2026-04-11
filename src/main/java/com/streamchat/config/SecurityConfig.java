@@ -65,6 +65,7 @@ public class SecurityConfig {
                                 "/images/**",
                                 "/favicon.ico",
                                 "/chat-test.html",
+                                "/chat.html",
                                 "/api/auth/**",
                                 "/ws-chat/**",
                                 "/api/streams",

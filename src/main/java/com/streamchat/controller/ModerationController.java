@@ -13,6 +13,7 @@ import com.streamchat.repository.ModerationLogRepository;
 import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
+import com.streamchat.service.AutoModService;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,6 +50,7 @@ public class ModerationController {
     private final StreamRepository streamRepository;
     private final ModerationLogRepository moderationLogRepository;
     private final UserStreamRoleRepository userStreamRoleRepository;
+    private final AutoModService autoModService;
 
     /**
      * Timeout a user.
@@ -365,6 +367,82 @@ public class ModerationController {
         return ResponseEntity.ok(Map.of(
                 "status", "success",
                 "message", "Moderator removed"
+        ));
+    }
+
+    /**
+     * Enable shadow ban for a user.
+     * Shadow-banned users can send messages, but only they see them.
+     */
+    @PostMapping("/shadow-ban/{userId}")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
+    @Operation(summary = "Enable shadow ban for a user")
+    public ResponseEntity<Map<String, String>> enableShadowBan(
+            @PathVariable String streamKey,
+            @PathVariable Long userId,
+            Authentication authentication) {
+
+        log.info("Shadow ban request: stream={}, userId={}, moderator={}",
+                streamKey, userId, authentication.getName());
+
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
+        autoModService.enableShadowBan(stream.getId(), userId);
+
+        return ResponseEntity.ok(Map.of(
+                "status", "success",
+                "message", "Shadow ban enabled for user"
+        ));
+    }
+
+    /**
+     * Disable shadow ban for a user.
+     */
+    @DeleteMapping("/shadow-ban/{userId}")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
+    @Operation(summary = "Disable shadow ban for a user")
+    public ResponseEntity<Map<String, String>> disableShadowBan(
+            @PathVariable String streamKey,
+            @PathVariable Long userId,
+            Authentication authentication) {
+
+        log.info("Shadow ban removal request: stream={}, userId={}, moderator={}",
+                streamKey, userId, authentication.getName());
+
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
+        autoModService.disableShadowBan(stream.getId(), userId);
+
+        return ResponseEntity.ok(Map.of(
+                "status", "success",
+                "message", "Shadow ban disabled for user"
+        ));
+    }
+
+    /**
+     * Get trust score for a user.
+     */
+    @GetMapping("/trust-score/{userId}")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
+    @Operation(summary = "Get AutoMod trust score for a user")
+    public ResponseEntity<Map<String, Object>> getTrustScore(
+            @PathVariable String streamKey,
+            @PathVariable Long userId,
+            Authentication authentication) {
+
+        log.debug("Trust score request: stream={}, userId={}", streamKey, userId);
+
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
+        double score = autoModService.getTrustScore(stream.getId(), userId);
+        boolean isShadowBanned = autoModService.isShadowBanned(stream.getId(), userId);
+
+        return ResponseEntity.ok(Map.of(
+                "trustScore", score,
+                "shadowBanned", isShadowBanned
         ));
     }
 }

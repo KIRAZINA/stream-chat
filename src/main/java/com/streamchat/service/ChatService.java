@@ -53,6 +53,8 @@ public class ChatService {
     private final UserBadgeRepository userBadgeRepository;
     private final EmoteRepository emoteRepository;
     private final EmoteService emoteService;
+    private final MetricsService metricsService;
+    private final AutoModService autoModService;
 
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
@@ -76,7 +78,9 @@ public class ChatService {
                        UserStreamRoleRepository userStreamRoleRepository,
                        UserBadgeRepository userBadgeRepository,
                        EmoteRepository emoteRepository,
-                       EmoteService emoteService) {
+                       EmoteService emoteService,
+                       MetricsService metricsService,
+                       AutoModService autoModService) {
         this.chatMessageRepository = chatMessageRepository;
         this.streamRepository = streamRepository;
         this.userRepository = userRepository;
@@ -87,6 +91,8 @@ public class ChatService {
         this.userBadgeRepository = userBadgeRepository;
         this.emoteRepository = emoteRepository;
         this.emoteService = emoteService;
+        this.metricsService = metricsService;
+        this.autoModService = autoModService;
     }
 
     @Transactional
@@ -99,56 +105,77 @@ public class ChatService {
     public ChatMessageDTO sendMessage(String streamKey, String username,
                                       String content, MessageType messageType,
                                       Long replyToMessageId) {
-        Stream stream = streamRepository.findByStreamKey(streamKey)
-                .orElseThrow(() -> new RuntimeException("Stream not found"));
+        long startTime = System.currentTimeMillis();
 
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        try {
+            Stream stream = streamRepository.findByStreamKey(streamKey)
+                    .orElseThrow(() -> new RuntimeException("Stream not found"));
 
-        if (moderationService.isUserBanned(stream.getId(), user.getId())) {
-            throw new UnauthorizedException("User is banned from this chat");
-        }
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (moderationService.isUserTimedOut(stream.getId(), user.getId())) {
-            throw new UnauthorizedException("User is timed out");
-        }
-
-        boolean privilegedUser = isPrivilegedUser(stream, user);
-
-        enforceAccessModes(stream, user, content, privilegedUser);
-        enforceSlowMode(stream, user, privilegedUser);
-
-        // Apply per-role rate limit overrides
-        if (!checkRateLimitWithRoleOverride(stream, user, privilegedUser)) {
-            throw new RateLimitException("Rate limit exceeded. Please slow down.");
-        }
-
-        validateMessageContent(stream, content);
-
-        ChatMessage message = ChatMessage.builder()
-                .stream(stream)
-                .user(user)
-                .username(username)
-                .content(content)
-                .replyToMessageId(replyToMessageId)
-                .messageType(messageType)
-                .build();
-
-        ChatMessage saved = chatMessageRepository.save(message);
-        log.info("Message saved: id={}, stream={}, user={}",
-                saved.getId(), streamKey, username);
-
-        if (redisTemplate != null) {
-            try {
-                cacheRecentMessage(stream.getId(), saved);
-            } catch (Exception e) {
-                log.warn("Failed to cache message in Redis: {}", e.getMessage());
+            if (moderationService.isUserBanned(stream.getId(), user.getId())) {
+                metricsService.recordMessageRejected("banned");
+                throw new UnauthorizedException("User is banned from this chat");
             }
+
+            if (moderationService.isUserTimedOut(stream.getId(), user.getId())) {
+                metricsService.recordMessageRejected("timed_out");
+                throw new UnauthorizedException("User is timed out");
+            }
+
+            boolean privilegedUser = isPrivilegedUser(stream, user);
+
+            enforceAccessModes(stream, user, content, privilegedUser);
+            enforceSlowMode(stream, user, privilegedUser);
+
+            // AutoMod analysis for non-privileged users
+            if (!privilegedUser) {
+                AutoModService.ModerationResult modResult = autoModService.analyzeMessage(stream, user, content);
+                if (modResult.isBlocked()) {
+                    metricsService.recordMessageRejected("automod");
+                    throw new IllegalArgumentException(modResult.getReason());
+                }
+            }
+
+            // Apply per-role rate limit overrides
+            if (!checkRateLimitWithRoleOverride(stream, user, privilegedUser)) {
+                metricsService.recordRateLimitExceeded();
+                metricsService.recordMessageRejected("rate_limit");
+                throw new RateLimitException("Rate limit exceeded. Please slow down.");
+            }
+
+            validateMessageContent(stream, content);
+
+            ChatMessage message = ChatMessage.builder()
+                    .stream(stream)
+                    .user(user)
+                    .username(username)
+                    .content(content)
+                    .replyToMessageId(replyToMessageId)
+                    .messageType(messageType)
+                    .build();
+
+            ChatMessage saved = chatMessageRepository.save(message);
+            log.info("Message saved: id={}, stream={}, user={}",
+                    saved.getId(), streamKey, username);
+
+            if (redisTemplate != null) {
+                try {
+                    cacheRecentMessage(stream.getId(), saved);
+                } catch (Exception e) {
+                    log.warn("Failed to cache message in Redis: {}", e.getMessage());
+                }
+            }
+
+            rememberSlowModeActivity(stream, user, privilegedUser);
+
+            metricsService.recordMessageSent(streamKey, messageType.name());
+
+            return convertToDTO(saved);
+        } finally {
+            metricsService.recordMessageProcessing(System.currentTimeMillis() - startTime);
         }
-
-        rememberSlowModeActivity(stream, user, privilegedUser);
-
-        return convertToDTO(saved);
     }
 
     public List<ChatMessageDTO> getRecentMessages(String streamKey) {
@@ -325,6 +352,8 @@ public class ChatService {
         if (stream.getSettings() != null &&
                 stream.getSettings().getProfanityFilterEnabled()) {
             if (moderationService.containsProfanity(content)) {
+                metricsService.recordBannedWordDetected();
+                metricsService.recordMessageRejected("profanity");
                 throw new IllegalArgumentException("Message contains blocked words");
             }
         }
@@ -332,6 +361,7 @@ public class ChatService {
         if (stream.getSettings() != null &&
                 stream.getSettings().getLinkProtectionEnabled()) {
             if (containsLinks(content)) {
+                metricsService.recordMessageRejected("links");
                 throw new IllegalArgumentException("Links are not allowed in this chat");
             }
         }

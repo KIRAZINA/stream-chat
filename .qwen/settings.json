@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mvn *)"
+      "Bash(mvn *)",
+      "Bash(timeout *)",
+      "Bash(curl *)",
+      "Bash(echo.)",
+      "Bash(taskkill *)",
+      "Bash(tasklist)",
+      "Bash(netstat *)"
     ]
-  }
+  },
+  "$version": 3
 }

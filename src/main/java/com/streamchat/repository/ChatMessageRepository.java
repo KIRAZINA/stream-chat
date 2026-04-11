@@ -78,4 +78,23 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
      * @param userId the user ID
      */
     void deleteByStreamIdAndUserId(Long streamId, Long userId);
+
+    /**
+     * Delete messages older than a given timestamp.
+     * Used for retention policy cleanup.
+     *
+     * @param before the cutoff timestamp
+     * @return number of deleted messages
+     */
+    @Query("DELETE FROM ChatMessage m WHERE m.createdAt < :before")
+    int deleteMessagesOlderThan(@Param("before") LocalDateTime before);
+
+    /**
+     * Count messages older than a given timestamp.
+     *
+     * @param before the cutoff timestamp
+     * @return number of messages
+     */
+    @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.createdAt < :before")
+    long countMessagesOlderThan(@Param("before") LocalDateTime before);
 }

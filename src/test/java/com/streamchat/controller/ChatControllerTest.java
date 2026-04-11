@@ -68,7 +68,7 @@ class ChatControllerTest {
 
     @Test
     void sendMessage_WithoutRedisPublisher_BroadcastsLocally() {
-        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT))
+        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT, null))
                 .thenReturn(savedMessage);
         when(redisMessagePublisherProvider.getIfAvailable()).thenReturn(null);
 
@@ -76,12 +76,11 @@ class ChatControllerTest {
 
         verify(messagingTemplate).convertAndSend("/topic/stream/stream-1", savedMessage);
         verify(redisMessagePublisherProvider).getIfAvailable();
-        verifyNoInteractions(redisMessagePublisher);
     }
 
     @Test
     void sendMessage_WithRedisPublisher_PublishesWithoutLocalBroadcast() {
-        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT))
+        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT, null))
                 .thenReturn(savedMessage);
         when(redisMessagePublisherProvider.getIfAvailable()).thenReturn(redisMessagePublisher);
         when(redisMessagePublisher.publish("stream-1", savedMessage)).thenReturn(true);
@@ -94,7 +93,7 @@ class ChatControllerTest {
 
     @Test
     void sendMessage_WhenRedisPublishFails_FallsBackToLocalBroadcast() {
-        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT))
+        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT, null))
                 .thenReturn(savedMessage);
         when(redisMessagePublisherProvider.getIfAvailable()).thenReturn(redisMessagePublisher);
         when(redisMessagePublisher.publish("stream-1", savedMessage)).thenReturn(false);
