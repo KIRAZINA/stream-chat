@@ -47,7 +47,6 @@ class EmoteServiceTest {
 
     @Test
     void parseEmotes_WithGlobalEmote_Success() {
-        // Arrange
         Long streamId = 1L;
         String message = "Hello :smile: world";
         
@@ -60,11 +59,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(globalEmote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertNotNull(result);
         assertTrue(result.contains("<img"));
         assertTrue(result.contains("smile.png"));
@@ -73,7 +68,6 @@ class EmoteServiceTest {
 
     @Test
     void parseEmotes_WithStreamSpecificEmote_Success() {
-        // Arrange
         Long streamId = 1L;
         String message = "Check out :custom: emote";
         
@@ -87,11 +81,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(streamEmote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertNotNull(result);
         assertTrue(result.contains("custom.png"));
         assertTrue(result.contains("custom"));
@@ -99,7 +89,6 @@ class EmoteServiceTest {
 
     @Test
     void parseEmotes_MultipleEmotes_Success() {
-        // Arrange
         Long streamId = 1L;
         String message = "Hello :smile: and :wave: everyone";
         
@@ -119,11 +108,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote1, emote2));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertNotNull(result);
         assertTrue(result.contains("smile.png"));
         assertTrue(result.contains("wave.png"));
@@ -131,23 +116,17 @@ class EmoteServiceTest {
 
     @Test
     void parseEmotes_NoEmotes_ReturnsOriginal() {
-        // Arrange
         Long streamId = 1L;
         String message = "Hello world";
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of());
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertEquals(message, result);
     }
 
     @Test
     void parseEmotes_EmoteNotInMessage_ReturnsOriginal() {
-        // Arrange
         Long streamId = 1L;
         String message = "Hello world";
         
@@ -160,17 +139,12 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertEquals(message, result);
     }
 
     @Test
     void parseEmotes_WholeWordMatchOnly() {
-        // Arrange
         Long streamId = 1L;
         String message = "smile :smile: :smile:smile";
         
@@ -183,11 +157,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         // Should replace :smile: but not "smile" or ":smile:smile"
         assertTrue(result.contains("<img")); // At least one replacement
         assertTrue(result.contains("smile")); // Original word "smile" should remain
@@ -195,7 +165,6 @@ class EmoteServiceTest {
 
     @Test
     void parseEmotes_CaseSensitive() {
-        // Arrange
         Long streamId = 1L;
         String message = "Hello :Smile: :smile:";
         
@@ -208,11 +177,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         // Only :smile: should be replaced, not :Smile:
         assertTrue(result.contains(":Smile:")); // Should remain unchanged
         assertTrue(result.contains("<img")); // :smile: should be replaced
@@ -220,7 +185,6 @@ class EmoteServiceTest {
 
     @Test
     void parseEmotes_DuplicateEmoteCodes_UsesFirst() {
-        // Arrange
         Long streamId = 1L;
         String message = "Hello :smile:";
         
@@ -240,11 +204,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote1, emote2));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         // Should use first emote (smile1.png) due to merge function
         assertTrue(result.contains("smile1.png"));
         assertFalse(result.contains("smile2.png"));
@@ -252,17 +212,12 @@ class EmoteServiceTest {
 
     @Test
     void parseEmotes_EmptyMessage_ReturnsEmpty() {
-        // Arrange
         Long streamId = 1L;
         String message = "";
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of());
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertEquals("", result);
     }
 
@@ -294,7 +249,6 @@ class EmoteServiceTest {
 
     @Test
     void parseEmotes_SpecialCharactersInMessage() {
-        // Arrange
         Long streamId = 1L;
         String message = "Hello :smile:! How are you?";
         
@@ -307,11 +261,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertTrue(result.contains("<img"));
         assertTrue(result.contains("!"));
         assertTrue(result.contains("?"));
@@ -319,7 +269,6 @@ class EmoteServiceTest {
 
     @Test
     void getStreamEmotes_Success() {
-        // Arrange
         Long streamId = 1L;
         
         Emote emote1 = Emote.builder()
@@ -339,11 +288,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote1, emote2));
-
-        // Act
         List<Emote> result = emoteService.getStreamEmotes(streamId);
-
-        // Assert
         assertNotNull(result);
         assertEquals(2, result.size());
         verify(emoteRepository).findByStreamIdOrGlobal(streamId);
@@ -351,23 +296,17 @@ class EmoteServiceTest {
 
     @Test
     void getStreamEmotes_EmptyList() {
-        // Arrange
         Long streamId = 1L;
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of());
-
-        // Act
         List<Emote> result = emoteService.getStreamEmotes(streamId);
-
-        // Assert
         assertNotNull(result);
         assertTrue(result.isEmpty());
     }
 
     @Test
     void parseEmotes_EmoteAtStart() {
-        // Arrange
         Long streamId = 1L;
         String message = ":smile: Hello";
         
@@ -380,18 +319,13 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertTrue(result.contains("<img"));
         assertTrue(result.contains("Hello"));
     }
 
     @Test
     void parseEmotes_EmoteAtEnd() {
-        // Arrange
         Long streamId = 1L;
         String message = "Hello :smile:";
         
@@ -404,18 +338,13 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertTrue(result.contains("<img"));
         assertTrue(result.contains("Hello"));
     }
 
     @Test
     void parseEmotes_HTMLFormatCorrect() {
-        // Arrange
         Long streamId = 1L;
         String message = ":smile:";
         
@@ -428,11 +357,7 @@ class EmoteServiceTest {
 
         when(emoteRepository.findByStreamIdOrGlobal(streamId))
                 .thenReturn(List.of(emote));
-
-        // Act
         String result = emoteService.parseEmotes(streamId, message);
-
-        // Assert
         assertTrue(result.contains("<img"));
         assertTrue(result.contains("src='https://example.com/smile.png'"));
         assertTrue(result.contains("alt='smile'"));

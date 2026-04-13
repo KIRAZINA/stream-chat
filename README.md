@@ -1,222 +1,173 @@
 # Stream Chat Platform
 
-A Spring Boot (Java 17) backend for a real-time chat system designed for live streaming.
-
-See [ROADMAP.md](ROADMAP.md) for the staged plan to turn the current project into a Twitch-like stream chat product.
+Production-ready Spring Boot backend for real-time stream chat. Supports WebSocket messaging, JWT auth, moderation, rate limiting, emotes, horizontal scaling via Redis, audit logging, pinned messages, and idempotent publishing.
 
 ## Features
 
-- WebSocket-based real-time messaging
-- Authentication and authorization (JWT)
-- Moderation tools (timeout/ban/message deletion)
-- Rate limiting / spam protection
-- Custom emotes support
+- Real-time messaging via STOMP over SockJS
+- JWT authentication with token refresh
+- Moderation: timeout, ban, unban, message deletion, pin/unpin
+- Rate limiting per role (regular 20/min, subscriber 50/min, mod/broadcaster 100/min)
+- Chat modes: slow mode, subscribers-only, followers-only, emote-only
+- AutoMod with spam detection, shadow banning, trust scores
 - Horizontal scaling via Redis pub/sub
+- Idempotent message publishing (deduplication by idempotency key)
+- Message replay endpoint for reconnect recovery
+- Audit logging for all moderation actions
+- Automated data retention cleanup (messages 90 days, audit logs 365 days)
+- Pinned messages for announcements
+- User reputation system (schema ready)
+- Prometheus metrics + health checks
 
 ## Tech Stack
 
-- Java 17
-- Spring Boot 3
-- Maven
-- PostgreSQL (runtime)
-- Redis (cache/pub-sub)
-- Flyway (database migrations)
-- OpenAPI (springdoc)
+- Java 17, Spring Boot 3.2.1
+- PostgreSQL, Redis, Flyway
+- JJWT 0.12, MapStruct, Lombok
+- Micrometer (Prometheus), Logback structured logging
+- Testcontainers for integration tests
 
-## Prerequisites
+## Quick Start
 
-- Java 17+
-- Maven 3.9+ (or Maven Wrapper if you add it)
-
-## Configuration
-
-The app uses Spring profiles:
-
-- `dev`: H2 in-memory database for local development (see `application-dev.properties`)
-- `prod`: configuration via environment variables (see `application-prod.properties`)
-
-By default no profile is selected. Use `--spring.profiles.active=dev` for local development or set `SPRING_PROFILES_ACTIVE=prod` for production.
-
-### Environment variables (production)
-
-- `JWT_SECRET` (required in `prod`) — **use a long secret (64+ chars)**
-- `JWT_EXPIRATION` (optional, default `86400000`)
-
-For `prod` profile:
-
-- `DATABASE_URL`
-- `DATABASE_USERNAME`
-- `DATABASE_PASSWORD`
-- `REDIS_HOST`
-- `REDIS_PORT` (optional, default `6379`)
-- `REDIS_PASSWORD` (optional)
-- `CORS_ALLOWED_ORIGINS` (optional, comma-separated)
-
-### CORS
-
-Use `app.cors.allowed-origins` to control allowed origins.
-If set to `*`, credentials are disabled. If set to a list, credentials are enabled.
-
-## Frontend
-
-The application includes a built-in chat client:
-
-- **Main chat client**: `http://localhost:8080/chat.html` — Full-featured chat UI with login, stream join, chat history, reconnect, and moderation support
-- **Legacy test page**: `http://localhost:8080/chat-test.html` — Simple WebSocket test page (deprecated)
-
-### Chat Client Features
-
-- **Authentication**: Login or register directly in the UI
-- **Stream Join**: Enter a stream key to join the chat
-- **Chat History**: Loads recent messages on join (paginated)
-- **Reconnect**: Automatically reconnects on connection loss
-- **Message Deletion**: Updates UI in real-time when messages are deleted
-- **Moderator Actions**: Delete messages (if user is a moderator)
-- **Badges**: Display user roles (broadcaster, moderator, subscriber, follower)
-- **Emotes**: Structured emote rendering
-
-## API Overview
-
-### REST endpoints
-
-- `POST /api/auth/register` — register and return JWT
-- `POST /api/auth/login` — login and return JWT
-- `POST /api/auth/refresh` — refresh JWT (requires authentication)
-
-- `GET /api/streams` — list live streams
-- `GET /api/streams/{streamKey}` — get stream details
-- `POST /api/streams` — create stream (requires authentication)
-- `POST /api/streams/{streamKey}/start` — start stream (requires authentication)
-- `POST /api/streams/{streamKey}/stop` — stop stream (requires authentication)
-
-Moderation and settings are under:
-
-- `/api/streams/{streamKey}/moderate/**`
-- `/api/streams/{streamKey}/settings`
-
-### WebSocket (STOMP over SockJS)
-
-- Endpoint: `/ws-chat`
-- Application destinations (client -> server):
-  - `/app/chat.send/{streamKey}`
-  - `/app/chat.join/{streamKey}`
-  - `/app/chat.leave/{streamKey}`
-  - `/app/chat.moderate/{streamKey}`
-- Topics (server -> clients):
-  - `/topic/stream/{streamKey}`
-  - `/topic/stream/{streamKey}/events`
-  - `/topic/stream/{streamKey}/moderation`
-- User queue (server -> specific user):
-  - `/user/queue/errors`
-
-WebSocket authentication is performed by sending a native STOMP header:
-
-```text
-Authorization: Bearer <JWT>
-```
-
-## Rate Limiting
-
-The application enforces per-role rate limits to prevent spam:
-
-- **Regular users**: 20 messages per 60 seconds
-- **Subscribers**: 50 messages per 60 seconds  
-- **Moderators/Broadcasters**: 100 messages per 60 seconds
-
-Limits are tracked per stream per user and stored in Redis when available (or in-memory fallback).
-
-When a user exceeds their rate limit, they receive a `RateLimitException` with a clear message.
-
-## Known limitations / TODO
-
-- None currently tracked.
-
-## Testing
-
-This project contains 3 levels of tests:
-
-- **Unit tests (services)** — `src/test/java/com/streamchat/service`
-  - Fast tests using Mockito (no Spring context).
-- **Controller tests (`@WebMvcTest`)** — `src/test/java/com/streamchat/controller`
-  - Validate REST contracts (status codes, JSON shape) with mocked dependencies.
-- **Integration tests (`@SpringBootTest`)** — `src/test/java/com/streamchat/integration`
-  - Run against a real Spring context.
-  - Use `dev` profile (H2 + `create-drop`, Redis auto-config excluded).
-  - Moderation integration tests focus on HTTP + security flow.
-
-### Run all tests
-
-```bash
-mvn test
-```
-
-### Run a specific test class
-
-```bash
-mvn test -Dtest=com.streamchat.integration.AuthIntegrationTest
-```
-
-## Run locally
-
-### Quick start (dev profile, H2 database)
-
-1. Build:
-
-```bash
-mvn clean package
-```
-
-2. Run:
+### Dev (H2 in-memory)
 
 ```bash
 mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"
 ```
 
-The application will start on `http://localhost:8080` with an in-memory H2 database (dev only).
+Chat client: `http://localhost:8080/chat.html`
+Swagger UI: `http://localhost:8080/swagger-ui.html`
 
-### Docker Compose (local PostgreSQL + Redis stack)
-
-Prerequisites: Docker and Docker Compose installed.
-
-1. Start the full stack:
+### Docker Compose (PostgreSQL + Redis)
 
 ```bash
+cp .env.example .env   # edit values as needed
 docker-compose up -d
 ```
 
-This will start:
-- **stream-chat-app** on `http://localhost:8080`
-- **PostgreSQL** on `localhost:5432` (database: `stream_chat_db`)
-- **Redis** on `localhost:6379`
+## Configuration
 
-2. View logs:
+Copy `.env.example` to `.env` and fill in values. Key variables:
+
+| Variable | Required | Description |
+|---|---|---|
+| `JWT_SECRET` | Yes | HMAC signing key, 64+ characters |
+| `DATABASE_URL` | prod | `jdbc:postgresql://host:5432/dbname` |
+| `DATABASE_USERNAME` | prod | DB username |
+| `DATABASE_PASSWORD` | prod | DB password |
+| `REDIS_HOST` | prod | Redis host |
+| `CORS_ALLOWED_ORIGINS` | Optional | Comma-separated origins |
+
+Spring profiles: `dev` (H2), `prod` (PostgreSQL + Redis via env vars).
+
+## API
+
+### Auth
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Register user, returns JWT |
+| POST | `/api/auth/login` | Login, returns JWT |
+| POST | `/api/auth/refresh` | Refresh token (authenticated) |
+
+### Streams
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/streams` | — | List live streams |
+| GET | `/api/streams/{key}` | — | Stream details |
+| GET | `/api/streams/{key}/messages` | — | Chat history (pagination, cursor) |
+| GET | `/api/streams/{key}/messages/replay` | — | Replay window for reconnect |
+| GET | `/api/streams/{key}/presence` | — | Active viewer count |
+| POST | `/api/streams` | Yes | Create stream |
+| PUT | `/api/streams/{key}` | Yes | Update stream |
+| POST | `/api/streams/{key}/start` | Yes | Go live |
+| POST | `/api/streams/{key}/stop` | Yes | End stream |
+| DELETE | `/api/streams/{key}` | Yes | Delete stream |
+
+### Settings
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/streams/{key}/settings` | Yes | Get chat settings |
+| PUT | `/api/streams/{key}/settings` | Yes | Update settings |
+
+### Moderation
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/streams/{key}/moderate/timeout` | Mod | Timeout user |
+| POST | `/api/streams/{key}/moderate/ban` | Mod | Ban user |
+| DELETE | `/api/streams/{key}/moderate/ban/{userId}` | Mod | Unban user |
+| DELETE | `/api/streams/{key}/moderate/messages/{msgId}` | Mod | Delete message |
+| DELETE | `/api/streams/{key}/moderate/messages/user/{userId}` | Mod | Delete all messages by user |
+| POST | `/api/streams/{key}/moderate/pin` | Mod | Pin/unpin message |
+| POST | `/api/streams/{key}/moderate/shadow-ban/{userId}` | Mod | Enable shadow ban |
+| DELETE | `/api/streams/{key}/moderate/shadow-ban/{userId}` | Mod | Disable shadow ban |
+| GET | `/api/streams/{key}/moderate/audit-logs` | Mod | Audit log |
+| GET | `/api/streams/{key}/moderate/trust-score/{userId}` | Mod | User trust score |
+| GET | `/api/streams/{key}/moderate/moderators` | Mod | List moderators |
+| POST | `/api/streams/{key}/moderate/moderators` | Admin | Add moderator |
+| DELETE | `/api/streams/{key}/moderate/moderators/{userId}` | Admin | Remove moderator |
+
+### WebSocket (STOMP over SockJS)
+
+Endpoint: `/ws-chat`
+
+Send with header `Authorization: Bearer <JWT>` on CONNECT.
+
+| Direction | Destination | Description |
+|---|---|---|
+| Client → Server | `/app/chat.send/{streamKey}` | Send message (body: `ChatMessageDTO`) |
+| Client → Server | `/app/chat.join/{streamKey}` | Join stream |
+| Client → Server | `/app/chat.leave/{streamKey}` | Leave stream |
+| Client → Server | `/app/chat.moderate/{streamKey}` | Moderate action |
+| Server → Clients | `/topic/stream/{streamKey}` | New message |
+| Server → Clients | `/topic/stream/{streamKey}/events` | Join/leave events |
+| Server → Clients | `/topic/stream/{streamKey}/moderation` | Moderation events |
+| Server → User | `/user/queue/errors` | Error messages |
+
+## Database Migrations
+
+Flyway manages schema. Current migrations:
+
+| Version | Description |
+|---|---|
+| V1 | Initial schema (users, streams, messages, roles) |
+| V2 | Moderation (bans, timeouts, moderation logs) |
+| V3 | Stream settings (slow mode, sub-only, etc.) |
+| V4 | User roles per stream |
+| V5 | Reply-to-message, indexes |
+| V6 | Phase 2 features (AutoMod, emotes, badges) |
+| V7 | Phase 3: audit logs, pinned messages, idempotency keys, reputation |
+
+## Testing
 
 ```bash
-docker-compose logs -f stream-chat-app
+mvn clean test          # all tests
+mvn test -Dtest=ChatServiceTest  # single class
 ```
 
-3. Stop the stack:
+203 tests across unit, controller, and integration layers.
 
-```bash
-docker-compose down
+## Deployment
+
+1. Copy `.env.example` to `.env`, set production values
+2. `docker-compose up -d`
+3. Health check: `curl http://localhost:8080/actuator/health`
+4. Metrics: `/actuator/prometheus`
+
+## Project Structure
+
 ```
-
-To persist data across restarts, the created volumes (`postgres-storage`, `redis-storage`) are preserved.
-
-## API Documentation
-
-OpenAPI UI (Swagger UI) is typically available at:
-
-- `http://localhost:8080/swagger-ui.html`
-
-(Exact path depends on your Springdoc configuration.)
-
-## Project Structure (high level)
-
-- `src/main/java` — application source code
-- `src/main/resources` — Spring configuration and Flyway migrations
-- `pom.xml` — Maven dependencies and build configuration
-- `Dockerfile` — multi-stage Docker build for production containerization
-- `docker-compose.yml` — local development stack (app + PostgreSQL + Redis)
-- `ROADMAP.md` — staged plan for future improvements
-
+src/main/java/com/streamchat/
+  config/          Spring configuration
+  controller/      REST + WebSocket controllers
+  exception/       Error handling
+  listener/        Redis subscriber, presence listener
+  model/           DTOs, entities, enums
+  repository/      Spring Data JPA repositories
+  scheduled/       Cron cleanup tasks
+  security/        JWT filter, token provider
+  service/         Business logic
+```

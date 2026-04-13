@@ -5,11 +5,15 @@ import com.streamchat.model.entity.Stream;
 import com.streamchat.model.entity.User;
 import com.streamchat.model.entity.ModerationLog;
 import com.streamchat.model.entity.UserStreamRole;
+import com.streamchat.repository.AuditLogRepository;
+import com.streamchat.repository.ChatMessageRepository;
 import com.streamchat.repository.ModerationLogRepository;
 import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
 import com.streamchat.security.JwtTokenProvider;
+import com.streamchat.service.AuditService;
+import com.streamchat.service.AutoModService;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
 import com.streamchat.service.StreamAuthorizationService;
@@ -29,6 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -69,6 +74,18 @@ class ModerationControllerTest {
     private StreamAuthorizationService streamAuthorizationService;
 
     @MockBean
+    private AutoModService autoModService;
+
+    @MockBean
+    private AuditService auditService;
+
+    @MockBean
+    private ChatMessageRepository chatMessageRepository;
+
+    @MockBean
+    private AuditLogRepository auditLogRepository;
+
+    @MockBean
     private JwtTokenProvider jwtTokenProvider;
 
     @MockBean
@@ -91,12 +108,20 @@ class ModerationControllerTest {
         testModerator = User.builder()
                 .id(1L)
                 .username("mod")
+                .email("mod@example.com")
                 .build();
 
         testTargetUser = User.builder()
                 .id(2L)
                 .username("target")
+                .email("target@example.com")
                 .build();
+
+        // Stub audit service to do nothing
+        lenient().doNothing().when(auditService).logAction(
+                anyLong(), anyString(), anyLong(), anyLong(), anyString(),
+                anyString(), anyMap(), anyString(), anyString()
+        );
     }
 
     @Test

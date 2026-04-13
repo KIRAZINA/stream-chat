@@ -57,6 +57,23 @@ public class ChatMessage {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "is_pinned")
+    @Builder.Default
+    private Boolean isPinned = false;
+
+    @Column(name = "pinned_at")
+    private LocalDateTime pinnedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "pinned_by")
+    private User pinnedBy;
+
+    @Column(name = "idempotency_key", length = 64, unique = true)
+    private String idempotencyKey;
+
+    @Column(name = "redis_sequence_id")
+    private Long redisSequenceId;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

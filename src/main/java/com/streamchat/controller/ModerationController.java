@@ -3,16 +3,21 @@ package com.streamchat.controller;
 import com.streamchat.exception.ResourceNotFoundException;
 import com.streamchat.model.dto.AddModeratorRequest;
 import com.streamchat.model.dto.BanRequest;
+import com.streamchat.model.dto.PinMessageRequest;
 import com.streamchat.model.dto.TimeoutRequest;
+import com.streamchat.model.entity.ChatMessage;
 import com.streamchat.model.entity.ModerationLog;
 import com.streamchat.model.entity.Stream;
 import com.streamchat.model.entity.User;
 import com.streamchat.model.entity.UserStreamRole;
 import com.streamchat.model.enums.Role;
+import com.streamchat.repository.AuditLogRepository;
+import com.streamchat.repository.ChatMessageRepository;
 import com.streamchat.repository.ModerationLogRepository;
 import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
+import com.streamchat.service.AuditService;
 import com.streamchat.service.AutoModService;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
@@ -51,6 +56,9 @@ public class ModerationController {
     private final ModerationLogRepository moderationLogRepository;
     private final UserStreamRoleRepository userStreamRoleRepository;
     private final AutoModService autoModService;
+    private final AuditService auditService;
+    private final ChatMessageRepository chatMessageRepository;
+    private final AuditLogRepository auditLogRepository;
 
     /**
      * Timeout a user.
@@ -85,6 +93,13 @@ public class ModerationController {
                 .orElseThrow(() -> new ResourceNotFoundException("Moderator not found"));
 
         moderationService.timeoutUser(stream.getId(), targetUser.getId(), moderator.getId(), duration, reason);
+
+        auditService.logAction(
+                moderator.getId(), moderator.getUsername(), stream.getId(),
+                targetUser.getId(), targetUsername, "TIMEOUT",
+                Map.of("duration", duration, "reason", reason),
+                null, null
+        );
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",
@@ -132,6 +147,13 @@ public class ModerationController {
                 .orElseThrow(() -> new ResourceNotFoundException("Moderator not found"));
 
         moderationService.banUser(stream.getId(), targetUser.getId(), moderator.getId(), permanent, duration, reason);
+
+        auditService.logAction(
+                moderator.getId(), moderator.getUsername(), stream.getId(),
+                targetUser.getId(), targetUsername, "BAN",
+                Map.of("permanent", String.valueOf(permanent), "reason", String.valueOf(reason)),
+                null, null
+        );
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",
@@ -444,5 +466,80 @@ public class ModerationController {
                 "trustScore", score,
                 "shadowBanned", isShadowBanned
         ));
+    }
+
+    /**
+     * Pin or unpin a message.
+     */
+    @PostMapping("/pin")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
+    @Operation(summary = "Pin or unpin a message")
+    public ResponseEntity<Map<String, String>> pinMessage(
+            @PathVariable String streamKey,
+            @Valid @RequestBody PinMessageRequest request,
+            Authentication authentication) {
+
+        log.info("Pin/unpin request: stream={}, messageId={}, pin={}, moderator={}",
+                streamKey, request.getMessageId(), request.getPin(), authentication.getName());
+
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
+        ChatMessage message = chatMessageRepository.findById(request.getMessageId())
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found"));
+
+        if (!message.getStream().getId().equals(stream.getId())) {
+            throw new IllegalArgumentException("Message does not belong to this stream");
+        }
+
+        message.setIsPinned(request.getPin());
+        message.setPinnedAt(request.getPin() ? java.time.LocalDateTime.now() : null);
+        User moderator = userRepository.findByUsername(authentication.getName()).orElse(null);
+        message.setPinnedBy(request.getPin() ? moderator : null);
+        chatMessageRepository.save(message);
+
+        String action = request.getPin() ? "PIN_MESSAGE" : "UNPIN_MESSAGE";
+        auditService.logAction(
+                moderator != null ? moderator.getId() : 0L,
+                authentication.getName(),
+                stream.getId(),
+                message.getUser().getId(), message.getUsername(), action,
+                Map.of("messageId", request.getMessageId(), "content", message.getContent()),
+                null, null
+        );
+
+        messagingTemplate.convertAndSend(
+                "/topic/stream/" + streamKey + "/moderation",
+                Map.of(
+                        "action", action,
+                        "messageId", request.getMessageId(),
+                        "pinned", request.getPin()
+                )
+        );
+
+        return ResponseEntity.ok(Map.of(
+                "status", "success",
+                "message", request.getPin() ? "Message pinned" : "Message unpinned"
+        ));
+    }
+
+    /**
+     * Get audit logs for a stream.
+     */
+    @GetMapping("/audit-logs")
+    @PreAuthorize("@streamAuthorizationService.canModerate(#streamKey, authentication.name)")
+    @Operation(summary = "Get audit logs for a stream")
+    public ResponseEntity<java.util.List<com.streamchat.model.entity.AuditLog>> getAuditLogs(
+            @PathVariable String streamKey) {
+
+        log.debug("Fetching audit logs: stream={}", streamKey);
+
+        Stream stream = streamRepository.findByStreamKey(streamKey)
+                .orElseThrow(() -> new ResourceNotFoundException("Stream not found"));
+
+        java.util.List<com.streamchat.model.entity.AuditLog> logs = auditLogRepository
+                .findTop50ByStreamIdOrderByCreatedAtDesc(stream.getId());
+
+        return ResponseEntity.ok(logs);
     }
 }

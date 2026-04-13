@@ -105,9 +105,24 @@ public class ChatService {
     public ChatMessageDTO sendMessage(String streamKey, String username,
                                       String content, MessageType messageType,
                                       Long replyToMessageId) {
+        return sendMessage(streamKey, username, content, messageType, replyToMessageId, null);
+    }
+
+    @Transactional
+    public ChatMessageDTO sendMessage(String streamKey, String username,
+                                      String content, MessageType messageType,
+                                      Long replyToMessageId, String idempotencyKey) {
         long startTime = System.currentTimeMillis();
 
         try {
+            // Idempotent publishing: if idempotencyKey exists, return existing message
+            if (idempotencyKey != null && !idempotencyKey.isEmpty()) {
+                var existing = chatMessageRepository.findByIdempotencyKey(idempotencyKey);
+                if (existing.isPresent()) {
+                    return convertToDTO(existing.get());
+                }
+            }
+
             Stream stream = streamRepository.findByStreamKey(streamKey)
                     .orElseThrow(() -> new RuntimeException("Stream not found"));
 
@@ -154,6 +169,7 @@ public class ChatService {
                     .content(content)
                     .replyToMessageId(replyToMessageId)
                     .messageType(messageType)
+                    .idempotencyKey(idempotencyKey)
                     .build();
 
             ChatMessage saved = chatMessageRepository.save(message);
@@ -560,6 +576,11 @@ public class ChatService {
                 .deletedById(message.getDeletedBy() != null ? message.getDeletedBy().getId() : null)
                 .deletedByUsername(message.getDeletedBy() != null ? message.getDeletedBy().getUsername() : null)
                 .deletedAt(message.getDeletedAt())
+                .isPinned(Boolean.TRUE.equals(message.getIsPinned()))
+                .pinnedAt(message.getPinnedAt())
+                .pinnedByUsername(message.getPinnedBy() != null ? message.getPinnedBy().getUsername() : null)
+                .idempotencyKey(message.getIdempotencyKey())
+                .redisSequenceId(message.getRedisSequenceId())
                 .timestamp(message.getCreatedAt());
 
         if (message.getReplyToMessageId() != null) {

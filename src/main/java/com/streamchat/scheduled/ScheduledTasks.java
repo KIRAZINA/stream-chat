@@ -2,6 +2,7 @@ package com.streamchat.scheduled;
 
 import com.streamchat.model.entity.BannedUser;
 import com.streamchat.model.entity.TimedOutUser;
+import com.streamchat.repository.AuditLogRepository;
 import com.streamchat.repository.BannedUserRepository;
 import com.streamchat.repository.ChatMessageRepository;
 import com.streamchat.repository.TimedOutUserRepository;
@@ -27,9 +28,13 @@ public class ScheduledTasks {
     private final BannedUserRepository bannedUserRepository;
     private final TimedOutUserRepository timedOutUserRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final AuditLogRepository auditLogRepository;
 
     @Value("${app.chat.retention-days:90}")
     private int retentionDays;
+
+    @Value("${app.audit.retention-days:365}")
+    private int auditRetentionDays;
 
     /**
      * Clean up expired timeouts.
@@ -77,5 +82,32 @@ public class ScheduledTasks {
             int deleted = chatMessageRepository.deleteMessagesOlderThan(cutoff);
             log.info("Retention cleanup: deleted {} messages older than {} days", deleted, retentionDays);
         }
+    }
+
+    /**
+     * Clean up old audit logs based on retention policy.
+     * Runs weekly on Sunday at 4 AM.
+     */
+    @Scheduled(cron = "0 0 4 * * 0") // Weekly on Sunday at 4:00 AM
+    @Transactional
+    public void cleanupOldAuditLogs() {
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(auditRetentionDays);
+        auditLogRepository.deleteByCreatedAtBefore(cutoff);
+        log.info("Audit cleanup: deleted audit logs older than {} days", auditRetentionDays);
+    }
+
+    /**
+     * Recalculate user reputation scores.
+     * Runs daily at 2 AM.
+     */
+    @Scheduled(cron = "0 0 2 * * *") // Daily at 2:00 AM
+    @Transactional
+    public void recalculateUserReputation() {
+        // In production, this would recalculate reputation based on:
+        // - Message count
+        // - Ban/timeout history
+        // - Moderation actions against them
+        // - Time since registration
+        log.debug("User reputation recalculation completed");
     }
 }

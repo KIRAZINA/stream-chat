@@ -34,5 +34,13 @@ public class ChatMessageDTO {
     private Long deletedById;
     private String deletedByUsername;
     private LocalDateTime deletedAt;
+
+    private Boolean isPinned;
+    private LocalDateTime pinnedAt;
+    private String pinnedByUsername;
+
+    private String idempotencyKey;
+    private Long redisSequenceId;
+
     private LocalDateTime timestamp;
 }

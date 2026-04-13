@@ -39,170 +39,122 @@ class RateLimitServiceTest {
 
     @Test
     void allowMessage_WithRedis_Success() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("ratelimit:1:2")).thenReturn(1L);
-
-        // Act
         boolean result = rateLimitService.allowMessage(streamId, userId);
-
-        // Assert
         assertTrue(result);
         verify(redisTemplate).expire(eq("ratelimit:1:2"), anyLong(), eq(TimeUnit.SECONDS));
     }
 
     @Test
     void allowMessage_WithRedis_ExceedsLimit() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
         int maxMessages = 20;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("ratelimit:1:2")).thenReturn(21L); // Exceeds limit
-
-        // Act
         boolean result = rateLimitService.allowMessage(streamId, userId, maxMessages, 60);
-
-        // Assert
         assertFalse(result);
     }
 
     @Test
     void allowMessage_WithRedis_AtLimit() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
         int maxMessages = 20;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("ratelimit:1:2")).thenReturn(20L); // Exactly at limit
-
-        // Act
         boolean result = rateLimitService.allowMessage(streamId, userId, maxMessages, 60);
-
-        // Assert
         assertTrue(result); // Should allow at limit
     }
 
     @Test
     void allowMessage_WithRedis_FirstMessage() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("ratelimit:1:2")).thenReturn(1L);
-
-        // Act
         boolean result = rateLimitService.allowMessage(streamId, userId);
-
-        // Assert
         assertTrue(result);
         verify(redisTemplate).expire(eq("ratelimit:1:2"), anyLong(), eq(TimeUnit.SECONDS));
     }
 
     @Test
     void allowMessage_WithRedis_SecondMessage_NoExpire() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("ratelimit:1:2")).thenReturn(2L); // Not first message
-
-        // Act
         boolean result = rateLimitService.allowMessage(streamId, userId);
-
-        // Assert
         assertTrue(result);
         verify(redisTemplate, never()).expire(anyString(), anyLong(), any(TimeUnit.class));
     }
 
     @Test
     void allowMessage_WithRedis_NullCount_FailOpen() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("ratelimit:1:2")).thenReturn(null); // Redis error
-
-        // Act - Should fail open (return true)
         boolean result = rateLimitService.allowMessage(streamId, userId);
-
-        // Assert
         assertTrue(result); // Fail open
     }
 
     @Test
     void allowMessage_WithRedis_Exception_FallbackToInMemory() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("ratelimit:1:2"))
                 .thenThrow(new RuntimeException("Redis connection failed"));
-
-        // Act - Should fallback to in-memory
         boolean result = rateLimitService.allowMessage(streamId, userId);
-
-        // Assert
         assertTrue(result); // First message should be allowed
     }
 
     @Test
     void allowMessage_WithoutRedis_InMemory_Success() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(rateLimitService, "redisTemplate", null);
 
         Long streamId = 1L;
         Long userId = 2L;
-
-        // Act
         boolean result = rateLimitService.allowMessage(streamId, userId);
-
-        // Assert
         assertTrue(result);
     }
 
     @Test
     void allowMessage_WithoutRedis_InMemory_ExceedsLimit() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(rateLimitService, "redisTemplate", null);
 
         Long streamId = 1L;
         Long userId = 2L;
         int maxMessages = 5;
         int windowSeconds = 60;
-
-        // Act - Send more messages than allowed
         for (int i = 0; i < maxMessages; i++) {
             assertTrue(rateLimitService.allowMessage(streamId, userId, maxMessages, windowSeconds));
         }
 
         // Next message should be blocked
         boolean result = rateLimitService.allowMessage(streamId, userId, maxMessages, windowSeconds);
-
-        // Assert
         assertFalse(result);
     }
 
     @Test
     void allowMessage_WithoutRedis_InMemory_WindowExpires() throws InterruptedException {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(rateLimitService, "redisTemplate", null);
 
         Long streamId = 1L;
         Long userId = 2L;
         int maxMessages = 3;
         int windowSeconds = 1; // 1 second window
-
-        // Act - Send messages to fill limit
         for (int i = 0; i < maxMessages; i++) {
             assertTrue(rateLimitService.allowMessage(streamId, userId, maxMessages, windowSeconds));
         }
@@ -219,36 +171,25 @@ class RateLimitServiceTest {
 
     @Test
     void resetRateLimit_WithRedis_Success() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
-
-        // Act
         rateLimitService.resetRateLimit(streamId, userId);
-
-        // Assert
         verify(redisTemplate).delete("ratelimit:1:2");
     }
 
     @Test
     void resetRateLimit_WithRedis_Exception_StillRemovesFromMemory() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         doThrow(new RuntimeException("Redis error"))
                 .when(redisTemplate).delete("ratelimit:1:2");
-
-        // Act - Should not throw
         rateLimitService.resetRateLimit(streamId, userId);
-
-        // Assert
         verify(redisTemplate).delete("ratelimit:1:2");
     }
 
     @Test
     void resetRateLimit_WithoutRedis_Success() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(rateLimitService, "redisTemplate", null);
 
         Long streamId = 1L;
@@ -256,97 +197,68 @@ class RateLimitServiceTest {
 
         // First, add some rate limit entries
         rateLimitService.allowMessage(streamId, userId);
-
-        // Act
         rateLimitService.resetRateLimit(streamId, userId);
 
-        // Assert - Should not throw
-        assertDoesNotThrow(() -> rateLimitService.resetRateLimit(streamId, userId));
+                assertDoesNotThrow(() -> rateLimitService.resetRateLimit(streamId, userId));
     }
 
     @Test
     void getRemainingMessages_WithRedis_NoMessages() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("ratelimit:1:2")).thenReturn(null);
-
-        // Act
         int remaining = rateLimitService.getRemainingMessages(streamId, userId);
-
-        // Assert
         assertEquals(20, remaining); // Default max messages
     }
 
     @Test
     void getRemainingMessages_WithRedis_SomeMessagesUsed() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("ratelimit:1:2")).thenReturn("5"); // 5 messages used
-
-        // Act
         int remaining = rateLimitService.getRemainingMessages(streamId, userId);
-
-        // Assert
         assertEquals(15, remaining); // 20 - 5 = 15
     }
 
     @Test
     void getRemainingMessages_WithRedis_AllMessagesUsed() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("ratelimit:1:2")).thenReturn("20"); // All messages used
-
-        // Act
         int remaining = rateLimitService.getRemainingMessages(streamId, userId);
-
-        // Assert
         assertEquals(0, remaining);
     }
 
     @Test
     void getRemainingMessages_WithRedis_Exception_FallbackToInMemory() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("ratelimit:1:2"))
                 .thenThrow(new RuntimeException("Redis error"));
-
-        // Act
         int remaining = rateLimitService.getRemainingMessages(streamId, userId);
-
-        // Assert
         assertEquals(20, remaining); // Default when no entry in memory
     }
 
     @Test
     void getRemainingMessages_WithoutRedis_NoMessages() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(rateLimitService, "redisTemplate", null);
 
         Long streamId = 1L;
         Long userId = 2L;
-
-        // Act
         int remaining = rateLimitService.getRemainingMessages(streamId, userId);
-
-        // Assert
         assertEquals(20, remaining); // Default max messages
     }
 
     @Test
     void getRemainingMessages_WithoutRedis_SomeMessagesUsed() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(rateLimitService, "redisTemplate", null);
 
         Long streamId = 1L;
@@ -356,33 +268,23 @@ class RateLimitServiceTest {
         rateLimitService.allowMessage(streamId, userId);
         rateLimitService.allowMessage(streamId, userId);
         rateLimitService.allowMessage(streamId, userId);
-
-        // Act
         int remaining = rateLimitService.getRemainingMessages(streamId, userId);
-
-        // Assert
         assertEquals(17, remaining); // 20 - 3 = 17
     }
 
     @Test
     void getRemainingMessages_WithoutRedis_NoEntry_ReturnsDefault() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(rateLimitService, "redisTemplate", null);
 
         Long streamId = 1L;
         Long userId = 2L;
-
-        // Act - No messages sent, so no entry in memory
         int remaining = rateLimitService.getRemainingMessages(streamId, userId);
-
-        // Assert
         // When no entry exists, it returns DEFAULT_MAX_MESSAGES
         assertEquals(20, remaining); // Default max messages when no entry
     }
 
     @Test
     void allowMessage_CustomParameters() {
-        // Arrange
         Long streamId = 1L;
         Long userId = 2L;
         int maxMessages = 10;
@@ -390,11 +292,7 @@ class RateLimitServiceTest {
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("ratelimit:1:2")).thenReturn(1L); // First message
-
-        // Act
         boolean result = rateLimitService.allowMessage(streamId, userId, maxMessages, windowSeconds);
-
-        // Assert
         assertTrue(result);
         verify(redisTemplate).expire(eq("ratelimit:1:2"), eq(30L), eq(TimeUnit.SECONDS));
     }

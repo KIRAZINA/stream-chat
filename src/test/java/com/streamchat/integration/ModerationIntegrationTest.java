@@ -13,6 +13,9 @@ import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserRoleRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
+import com.streamchat.repository.AuditLogRepository;
+import com.streamchat.repository.ChatMessageRepository;
+import com.streamchat.service.AuditService;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,6 +69,15 @@ class ModerationIntegrationTest {
 
     @MockBean
     private ChatService chatService;
+
+    @MockBean
+    private AuditService auditService;
+
+    @MockBean
+    private ChatMessageRepository chatMessageRepository;
+
+    @MockBean
+    private AuditLogRepository auditLogRepository;
 
     @MockBean
     private ModerationLogRepository moderationLogRepository;

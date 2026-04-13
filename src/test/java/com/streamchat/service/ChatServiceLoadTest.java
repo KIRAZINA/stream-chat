@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
@@ -81,11 +82,15 @@ class ChatServiceLoadTest {
         when(userRepository.findByUsername("user1")).thenReturn(Optional.of(user));
         when(moderationService.isUserBanned(anyLong(), anyLong())).thenReturn(false);
         when(moderationService.isUserTimedOut(anyLong(), anyLong())).thenReturn(false);
-        when(userBadgeRepository.hasBadge(anyLong(), anyLong(), anyString())).thenReturn(false);
-        when(emoteRepository.existsByStreamIdAndCode(anyLong(), anyString())).thenReturn(false);
-        when(emoteService.buildMessageFragments(anyLong(), anyString())).thenReturn(java.util.List.of());
-        when(autoModService.analyzeMessage(any(), any(), anyString()))
+        lenient().when(userBadgeRepository.hasBadge(anyLong(), anyLong(), anyString())).thenReturn(false);
+        lenient().when(emoteRepository.existsByStreamIdAndCode(anyLong(), anyString())).thenReturn(false);
+        lenient().when(emoteService.buildMessageFragments(anyLong(), anyString())).thenReturn(java.util.List.of());
+        lenient().when(autoModService.analyzeMessage(any(), any(), anyString()))
                 .thenReturn(AutoModService.ModerationResult.allowed());
+        lenient().doNothing().when(metricsService).recordMessageProcessing(anyLong());
+        lenient().doNothing().when(metricsService).recordMessageSent(anyString(), anyString());
+        lenient().doNothing().when(metricsService).recordMessageRejected(anyString());
+        lenient().doNothing().when(metricsService).recordRateLimitExceeded();
 
         // Simulate rate limit after 5 messages
         AtomicInteger callCount = new AtomicInteger(0);
@@ -141,11 +146,13 @@ class ChatServiceLoadTest {
         when(userRepository.findByUsername("user1")).thenReturn(Optional.of(user));
         when(moderationService.isUserBanned(anyLong(), anyLong())).thenReturn(false);
         when(moderationService.isUserTimedOut(anyLong(), anyLong())).thenReturn(false);
-        when(userBadgeRepository.hasBadge(anyLong(), anyLong(), anyString())).thenReturn(false);
-        when(emoteRepository.existsByStreamIdAndCode(anyLong(), anyString())).thenReturn(false);
-        when(emoteService.buildMessageFragments(anyLong(), anyString())).thenReturn(java.util.List.of());
-        when(autoModService.analyzeMessage(any(), any(), anyString()))
+        lenient().when(userBadgeRepository.hasBadge(anyLong(), anyLong(), anyString())).thenReturn(false);
+        lenient().when(emoteRepository.existsByStreamIdAndCode(anyLong(), anyString())).thenReturn(false);
+        lenient().when(emoteService.buildMessageFragments(anyLong(), anyString())).thenReturn(java.util.List.of());
+        lenient().when(autoModService.analyzeMessage(any(), any(), anyString()))
                 .thenReturn(AutoModService.ModerationResult.allowed());
+        lenient().doNothing().when(metricsService).recordMessageProcessing(anyLong());
+        lenient().doNothing().when(metricsService).recordMessageSent(anyString(), anyString());
         when(rateLimitService.allowMessage(anyLong(), anyLong(), anyInt(), anyInt())).thenReturn(true);
         when(chatMessageRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 

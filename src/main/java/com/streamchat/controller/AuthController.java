@@ -131,8 +131,10 @@ public class AuthController {
 
         AuthResponse response = AuthResponse.builder()
                 .token(token)
+                .refreshToken(token) // In production, use separate refresh token
                 .username(user.getUsername())
                 .email(user.getEmail())
+                .expiresIn(tokenProvider.getExpirationMs() / 1000)
                 .build();
 
         return ResponseEntity.ok(response);

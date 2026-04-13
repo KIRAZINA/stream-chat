@@ -178,13 +178,7 @@ public class StreamService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Get stream by key.
-     *
-     * @param streamKey the stream key
-     * @return stream DTO
-     */
-    public StreamDTO getStreamByKey(String streamKey) {
+        public StreamDTO getStreamByKey(String streamKey) {
         Stream stream = streamRepository.findByStreamKey(streamKey)
                 .orElseThrow(() -> new RuntimeException("Stream not found"));
         return convertToDTO(stream);

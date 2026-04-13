@@ -59,13 +59,7 @@ public class UserService {
         return convertToDTO(saved);
     }
 
-    /**
-     * Get user by username.
-     *
-     * @param username the username
-     * @return user DTO
-     */
-    public UserDTO getUserByUsername(String username) {
+        public UserDTO getUserByUsername(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         return convertToDTO(user);

@@ -71,7 +71,6 @@ class StreamServiceTest {
 
     @Test
     void createStream_Success() {
-        // Arrange
         String username = "streamer";
         String title = "My Stream";
         String description = "Stream Description";
@@ -87,11 +86,7 @@ class StreamServiceTest {
                 });
         when(streamSettingsRepository.save(any(StreamSettings.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         StreamDTO result = streamService.createStream(username, title, description);
-
-        // Assert
         assertNotNull(result);
         assertNotNull(result.getStreamKey());
         assertEquals(title, result.getTitle());
@@ -104,15 +99,12 @@ class StreamServiceTest {
 
     @Test
     void createStream_UserNotFound_ThrowsException() {
-        // Arrange
         String username = "nonexistent";
         String title = "My Stream";
         String description = "Stream Description";
 
         when(userRepository.findByUsername(username))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.createStream(username, title, description));
 
@@ -122,7 +114,6 @@ class StreamServiceTest {
 
     @Test
     void createStream_GeneratesUniqueStreamKey() {
-        // Arrange
         String username = "streamer";
         String title = "My Stream";
         String description = "Stream Description";
@@ -139,11 +130,7 @@ class StreamServiceTest {
                 });
         when(streamSettingsRepository.save(any(StreamSettings.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         StreamDTO result = streamService.createStream(username, title, description);
-
-        // Assert
         assertNotNull(result.getStreamKey());
         assertEquals(16, result.getStreamKey().length()); // UUID substring length
         verify(streamRepository).save(any(Stream.class));
@@ -151,7 +138,6 @@ class StreamServiceTest {
 
     @Test
     void startStream_Success() {
-        // Arrange
         String streamKey = "test-stream-key";
         String username = "streamer";
 
@@ -159,11 +145,7 @@ class StreamServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(streamRepository.save(any(Stream.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         streamService.startStream(streamKey, username);
-
-        // Assert
         verify(streamRepository).save(argThat(stream ->
                 stream.getIsLive() && stream.getStartedAt() != null
         ));
@@ -171,14 +153,11 @@ class StreamServiceTest {
 
     @Test
     void startStream_StreamNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "nonexistent-stream";
         String username = "streamer";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.startStream(streamKey, username));
 
@@ -188,14 +167,11 @@ class StreamServiceTest {
 
     @Test
     void startStream_UnauthorizedUser_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream-key";
         String username = "unauthorized-user";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.of(testStream));
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.startStream(streamKey, username));
 
@@ -205,7 +181,6 @@ class StreamServiceTest {
 
     @Test
     void updateStream_Success() {
-        // Arrange
         String streamKey = "test-stream-key";
         String username = "streamer";
         String newTitle = "Updated Title";
@@ -215,11 +190,7 @@ class StreamServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(streamRepository.save(any(Stream.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         StreamDTO result = streamService.updateStream(streamKey, username, newTitle, newDescription);
-
-        // Assert
         assertEquals(newTitle, result.getTitle());
         assertEquals(newDescription, result.getDescription());
         verify(streamRepository).save(any(Stream.class));
@@ -227,7 +198,6 @@ class StreamServiceTest {
 
     @Test
     void updateStream_StreamNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "nonexistent-stream";
         String username = "streamer";
         String newTitle = "Updated Title";
@@ -235,8 +205,6 @@ class StreamServiceTest {
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.updateStream(streamKey, username, newTitle, newDescription));
 
@@ -245,7 +213,6 @@ class StreamServiceTest {
 
     @Test
     void updateStream_Unauthorized_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream-key";
         String username = "other-user";
         String newTitle = "Updated Title";
@@ -253,8 +220,6 @@ class StreamServiceTest {
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.of(testStream));
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.updateStream(streamKey, username, newTitle, newDescription));
 
@@ -263,30 +228,22 @@ class StreamServiceTest {
 
     @Test
     void deleteStream_Success() {
-        // Arrange
         String streamKey = "test-stream-key";
         String username = "streamer";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.of(testStream));
-
-        // Act
         streamService.deleteStream(streamKey, username);
-
-        // Assert
         verify(streamRepository).delete(testStream);
     }
 
     @Test
     void deleteStream_StreamNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "nonexistent-stream";
         String username = "streamer";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.deleteStream(streamKey, username));
 
@@ -295,14 +252,11 @@ class StreamServiceTest {
 
     @Test
     void deleteStream_Unauthorized_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream-key";
         String username = "other-user";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.of(testStream));
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.deleteStream(streamKey, username));
 
@@ -311,7 +265,6 @@ class StreamServiceTest {
 
     @Test
     void stopStream_Success() {
-        // Arrange
         String streamKey = "test-stream-key";
         String username = "streamer";
         testStream.setIsLive(true);
@@ -321,11 +274,7 @@ class StreamServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(streamRepository.save(any(Stream.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         streamService.stopStream(streamKey, username);
-
-        // Assert
         verify(streamRepository).save(argThat(stream ->
                 !stream.getIsLive() &&
                         stream.getViewerCount() == 0 &&
@@ -335,14 +284,11 @@ class StreamServiceTest {
 
     @Test
     void stopStream_StreamNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "nonexistent-stream";
         String username = "streamer";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.stopStream(streamKey, username));
 
@@ -352,14 +298,11 @@ class StreamServiceTest {
 
     @Test
     void stopStream_UnauthorizedUser_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream-key";
         String username = "unauthorized-user";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.of(testStream));
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.stopStream(streamKey, username));
 
@@ -369,7 +312,6 @@ class StreamServiceTest {
 
     @Test
     void getLiveStreams_Success() {
-        // Arrange
         Stream liveStream1 = Stream.builder()
                 .id(1L)
                 .streamKey("stream1")
@@ -386,11 +328,7 @@ class StreamServiceTest {
 
         when(streamRepository.findByIsLiveTrue())
                 .thenReturn(List.of(liveStream1, liveStream2));
-
-        // Act
         List<StreamDTO> result = streamService.getLiveStreams();
-
-        // Assert
         assertNotNull(result);
         assertEquals(2, result.size());
         assertTrue(result.stream().allMatch(StreamDTO::getIsLive));
@@ -398,30 +336,20 @@ class StreamServiceTest {
 
     @Test
     void getLiveStreams_EmptyList() {
-        // Arrange
         when(streamRepository.findByIsLiveTrue())
                 .thenReturn(List.of());
-
-        // Act
         List<StreamDTO> result = streamService.getLiveStreams();
-
-        // Assert
         assertNotNull(result);
         assertTrue(result.isEmpty());
     }
 
     @Test
     void getStreamByKey_Success() {
-        // Arrange
         String streamKey = "test-stream-key";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.of(testStream));
-
-        // Act
         StreamDTO result = streamService.getStreamByKey(streamKey);
-
-        // Assert
         assertNotNull(result);
         assertEquals(testStream.getId(), result.getId());
         assertEquals(testStream.getStreamKey(), result.getStreamKey());
@@ -431,13 +359,10 @@ class StreamServiceTest {
 
     @Test
     void getStreamByKey_StreamNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "nonexistent-stream";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.getStreamByKey(streamKey));
 
@@ -446,7 +371,6 @@ class StreamServiceTest {
 
     @Test
     void updateViewerCount_Success() {
-        // Arrange
         String streamKey = "test-stream-key";
         int newViewerCount = 150;
 
@@ -454,11 +378,7 @@ class StreamServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(streamRepository.save(any(Stream.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         streamService.updateViewerCount(streamKey, newViewerCount);
-
-        // Assert
         verify(streamRepository).save(argThat(stream ->
                 stream.getViewerCount() == newViewerCount
         ));
@@ -466,14 +386,11 @@ class StreamServiceTest {
 
     @Test
     void updateViewerCount_StreamNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "nonexistent-stream";
         int newViewerCount = 150;
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 streamService.updateViewerCount(streamKey, newViewerCount));
 
@@ -483,7 +400,6 @@ class StreamServiceTest {
 
     @Test
     void updateViewerCount_ZeroViewers() {
-        // Arrange
         String streamKey = "test-stream-key";
         int newViewerCount = 0;
 
@@ -491,11 +407,7 @@ class StreamServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(streamRepository.save(any(Stream.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         streamService.updateViewerCount(streamKey, newViewerCount);
-
-        // Assert
         verify(streamRepository).save(argThat(stream ->
                 stream.getViewerCount() == 0
         ));
@@ -503,7 +415,6 @@ class StreamServiceTest {
 
     @Test
     void updateViewerCount_NegativeViewers() {
-        // Arrange
         String streamKey = "test-stream-key";
         int newViewerCount = -10; // Edge case
 
@@ -511,11 +422,7 @@ class StreamServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(streamRepository.save(any(Stream.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         streamService.updateViewerCount(streamKey, newViewerCount);
-
-        // Assert
         verify(streamRepository).save(argThat(stream ->
                 stream.getViewerCount() == newViewerCount
         ));

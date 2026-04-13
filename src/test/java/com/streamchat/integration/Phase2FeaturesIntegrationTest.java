@@ -125,10 +125,10 @@ class Phase2FeaturesIntegrationTest {
 
     @Test
     void metrics_prometheusEndpoint_isAccessibleOr404() throws Exception {
-        // Prometheus endpoint may not be mapped in dev profile
+        // Prometheus endpoint may not be mapped in dev profile or may return 404
         // Just verify it doesn't crash
         mockMvc.perform(get("/actuator/prometheus"))
-                .andExpect(status().is5xxServerError()); // or isOk in prod
+                .andExpect(status().is4xxClientError()); // 404 is expected in dev
     }
 
     @Test

@@ -1,42 +1,30 @@
+### Build output ###
 target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
-!**/src/test/**/target/
-.kotlin
+!**/src/test/**/build/
 
-### Logs & local runtime files ###
-*.log
-logs/
-*.pid
-*.seed
-*.pid.lock
-
-### Local environment / secrets (do not commit) ###
+### Local environment & secrets (DO NOT COMMIT) ###
 .env
-.env.*
+!.env.example
 *.jks
 *.p12
 *.pfx
 *.keystore
 
-### Java crash logs ###
-hs_err_pid*
+### Logs & runtime files ###
+*.log
+logs/
+*.pid
+*.pid.lock
+*.seed
 
-### IntelliJ IDEA ###
+### IDEs ###
 .idea/
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
 *.iws
 *.iml
 *.ipr
 out/
-
-### Maven ###
-.mvn/timing.properties
-
-### Eclipse ###
 .apt_generated
 .classpath
 .factorypath
@@ -44,25 +32,28 @@ out/
 .settings
 .springBeans
 .sts4-cache
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
 build/
 !**/src/main/**/build/
-!**/src/test/**/build/
 
-### VS Code ###
+### Editor / tools ###
 .vscode/
+.qwen/
 
-### Windows ###
+### OS ###
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-
-### Mac OS ###
 .DS_Store
+
+### Java crash ###
+hs_err_pid*
+replay_pid*
+
+### Maven ###
+.mvn/timing.properties

@@ -76,6 +76,13 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Get token expiration time in milliseconds.
+     */
+    public long getExpirationMs() {
+        return jwtExpirationMs;
+    }
+
+    /**
      * Extract username from JWT token.
      *
      * @param token the JWT token

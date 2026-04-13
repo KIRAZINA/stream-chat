@@ -67,6 +67,12 @@ class ChatServiceTest {
     @Mock
     private EmoteRepository emoteRepository;
 
+    @Mock
+    private MetricsService metricsService;
+
+    @Mock
+    private AutoModService autoModService;
+
     @InjectMocks
     private ChatService chatService;
 
@@ -87,6 +93,13 @@ class ChatServiceTest {
         lenient().when(userBadgeRepository.hasBadgeGrantedBefore(anyLong(), anyLong(), anyString(), any(LocalDateTime.class)))
                 .thenReturn(false);
         lenient().when(emoteService.buildMessageFragments(anyLong(), anyString())).thenReturn(List.of());
+        lenient().doNothing().when(metricsService).recordMessageProcessing(anyLong());
+        lenient().doNothing().when(metricsService).recordMessageSent(anyString(), anyString());
+        lenient().doNothing().when(metricsService).recordMessageRejected(anyString());
+        lenient().doNothing().when(metricsService).recordRateLimitExceeded();
+        lenient().doNothing().when(metricsService).recordBannedWordDetected();
+        lenient().when(autoModService.analyzeMessage(any(), any(), any()))
+                .thenReturn(AutoModService.ModerationResult.allowed());
 
         streamOwner = User.builder()
                 .id(99L)
@@ -124,7 +137,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_Success() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "Hello, world!";
@@ -154,12 +166,8 @@ class ChatServiceTest {
 
         when(chatMessageRepository.save(any(ChatMessage.class)))
                 .thenReturn(savedMessage);
-
-        // Act
         ChatMessageDTO result = chatService.sendMessage(
                 streamKey, username, content, MessageType.CHAT);
-
-        // Assert
         assertNotNull(result);
         assertEquals(1L, result.getId());
         assertEquals(username, result.getUsername());
@@ -174,7 +182,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_UserBanned_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "Hello, world!";
@@ -185,8 +192,6 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(testUser));
         when(moderationService.isUserBanned(anyLong(), anyLong()))
                 .thenReturn(true);
-
-        // Act & Assert
         Exception exception = assertThrows(RuntimeException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -196,7 +201,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_UserTimedOut_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "Hello, world!";
@@ -209,8 +213,6 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(moderationService.isUserTimedOut(anyLong(), anyLong()))
                 .thenReturn(true);
-
-        // Act & Assert
         Exception exception = assertThrows(RuntimeException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -220,7 +222,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_RateLimitExceeded_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "Spam message";
@@ -235,8 +236,6 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(rateLimitService.allowMessage(anyLong(), anyLong()))
                 .thenReturn(false);
-
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -245,7 +244,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_MessageTooLong_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "a".repeat(600); // Exceeds max length of 500
@@ -260,8 +258,6 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(rateLimitService.allowMessage(anyLong(), anyLong()))
                 .thenReturn(true);
-
-        // Act & Assert
         Exception exception = assertThrows(IllegalArgumentException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -271,7 +267,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_EmptyContent_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "   "; // Empty after trim
@@ -286,8 +281,6 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(rateLimitService.allowMessage(anyLong(), anyLong()))
                 .thenReturn(true);
-
-        // Act & Assert
         Exception exception = assertThrows(IllegalArgumentException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -297,7 +290,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_WithLinksWhenProtectionEnabled_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "Check out https://example.com";
@@ -314,8 +306,6 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(rateLimitService.allowMessage(anyLong(), anyLong()))
                 .thenReturn(true);
-
-        // Act & Assert
         Exception exception = assertThrows(IllegalArgumentException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -325,7 +315,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_WithProfanityWhenFilterEnabled_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "This contains badword";
@@ -344,8 +333,6 @@ class ChatServiceTest {
                 .thenReturn(true);
         when(moderationService.containsProfanity(content))
                 .thenReturn(true);
-
-        // Act & Assert
         Exception exception = assertThrows(IllegalArgumentException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -355,7 +342,6 @@ class ChatServiceTest {
 
     @Test
     void deleteMessage_Success() {
-        // Arrange
         Long messageId = 1L;
         String deletedByUsername = "moderator";
 
@@ -380,11 +366,7 @@ class ChatServiceTest {
                 .thenReturn(true);
         when(chatMessageRepository.save(any(ChatMessage.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         chatService.deleteMessage(messageId, deletedByUsername);
-
-        // Assert
         verify(chatMessageRepository).save(argThat(msg ->
                 msg.getIsDeleted() &&
                         msg.getDeletedBy().getId().equals(2L)
@@ -394,7 +376,6 @@ class ChatServiceTest {
 
     @Test
     void deleteMessage_UnauthorizedUser_ThrowsException() {
-        // Arrange
         Long messageId = 1L;
         String deletedByUsername = "regularuser";
 
@@ -417,8 +398,6 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(regularUser));
         when(streamAuthorizationService.canModerate(anyString(), anyString()))
                 .thenReturn(false);
-
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 chatService.deleteMessage(messageId, deletedByUsername));
 
@@ -427,7 +406,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_WithoutRedis_Success() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(chatService, "redisTemplate", null);
 
         String streamKey = "test-stream";
@@ -456,12 +434,8 @@ class ChatServiceTest {
 
         when(chatMessageRepository.save(any(ChatMessage.class)))
                 .thenReturn(savedMessage);
-
-        // Act
         ChatMessageDTO result = chatService.sendMessage(
                 streamKey, username, content, MessageType.CHAT);
-
-        // Assert
         assertNotNull(result);
         assertEquals(content, result.getContent());
         verify(chatMessageRepository).save(any(ChatMessage.class));
@@ -469,7 +443,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_RedisError_GracefulDegradation() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "Hello with Redis error!";
@@ -500,27 +473,20 @@ class ChatServiceTest {
 
         when(chatMessageRepository.save(any(ChatMessage.class)))
                 .thenReturn(savedMessage);
-
-        // Act - Should not throw exception, should continue despite Redis error
         ChatMessageDTO result = chatService.sendMessage(
                 streamKey, username, content, MessageType.CHAT);
-
-        // Assert
         assertNotNull(result);
         verify(chatMessageRepository).save(any(ChatMessage.class));
     }
 
     @Test
     void sendMessage_StreamNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "non-existent-stream";
         String username = "testuser";
         String content = "Hello";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -529,7 +495,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_UserNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "non-existent-user";
         String content = "Hello";
@@ -538,8 +503,6 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(userRepository.findByUsername(username))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -548,7 +511,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_WithNullContent_ThrowsException() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = null;
@@ -563,8 +525,8 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(rateLimitService.allowMessage(anyLong(), anyLong()))
                 .thenReturn(true);
-
-        // Act & Assert
+        lenient().when(autoModService.analyzeMessage(any(), any(), any()))
+                .thenReturn(AutoModService.ModerationResult.allowed());
         Exception exception = assertThrows(IllegalArgumentException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -574,7 +536,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_WithDefaultMaxLength_WhenSettingsNull() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "a".repeat(501); // Exceeds default 500
@@ -591,8 +552,6 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(rateLimitService.allowMessage(anyLong(), anyLong()))
                 .thenReturn(true);
-
-        // Act & Assert
         Exception exception = assertThrows(IllegalArgumentException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -601,7 +560,6 @@ class ChatServiceTest {
 
     @Test
     void sendMessage_WithDifferentMessageTypes() {
-        // Arrange
         String streamKey = "test-stream";
         String username = "testuser";
         String content = "System message";
@@ -630,12 +588,8 @@ class ChatServiceTest {
 
         when(chatMessageRepository.save(any(ChatMessage.class)))
                 .thenReturn(savedMessage);
-
-        // Act
         ChatMessageDTO result = chatService.sendMessage(
                 streamKey, username, content, MessageType.SYSTEM);
-
-        // Assert
         assertNotNull(result);
         assertEquals(MessageType.SYSTEM, result.getMessageType());
     }
@@ -856,7 +810,6 @@ class ChatServiceTest {
 
     @Test
     void getRecentMessages_FromCache_Success() {
-        // Arrange
         String streamKey = "test-stream";
         ChatMessageDTO cachedMessage = ChatMessageDTO.builder()
                 .id(1L)
@@ -868,11 +821,7 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(listOperations.range(anyString(), eq(0L), eq(-1L)))
                 .thenReturn(java.util.List.of(cachedMessage));
-
-        // Act
         var result = chatService.getRecentMessages(streamKey);
-
-        // Assert
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("Cached message", result.get(0).getContent());
@@ -882,7 +831,6 @@ class ChatServiceTest {
 
     @Test
     void getRecentMessages_FromDatabase_WhenCacheEmpty() {
-        // Arrange
         String streamKey = "test-stream";
         ChatMessage dbMessage = ChatMessage.builder()
                 .id(1L)
@@ -900,11 +848,7 @@ class ChatServiceTest {
                 .thenReturn(java.util.List.of());
         when(chatMessageRepository.findTop100ByStreamIdAndIsDeletedFalseOrderByCreatedAtDesc(anyLong()))
                 .thenReturn(java.util.List.of(dbMessage));
-
-        // Act
         var result = chatService.getRecentMessages(streamKey);
-
-        // Assert
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("DB message", result.get(0).getContent());
@@ -914,7 +858,6 @@ class ChatServiceTest {
 
     @Test
     void getRecentMessages_WithoutRedis_FromDatabase() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(chatService, "redisTemplate", null);
 
         String streamKey = "test-stream";
@@ -931,11 +874,7 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(chatMessageRepository.findTop100ByStreamIdAndIsDeletedFalseOrderByCreatedAtDesc(anyLong()))
                 .thenReturn(java.util.List.of(dbMessage));
-
-        // Act
         var result = chatService.getRecentMessages(streamKey);
-
-        // Assert
         assertNotNull(result);
         assertEquals(1, result.size());
         verify(chatMessageRepository, times(1))
@@ -944,13 +883,10 @@ class ChatServiceTest {
 
     @Test
     void getRecentMessages_StreamNotFound_ThrowsException() {
-        // Arrange
         String streamKey = "non-existent-stream";
 
         when(streamRepository.findByStreamKey(streamKey))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 chatService.getRecentMessages(streamKey));
     }
@@ -1124,7 +1060,6 @@ class ChatServiceTest {
 
     @Test
     void getRecentMessages_RedisError_FallbackToDatabase() {
-        // Arrange
         String streamKey = "test-stream";
         ChatMessage dbMessage = ChatMessage.builder()
                 .id(1L)
@@ -1142,11 +1077,7 @@ class ChatServiceTest {
                 .thenThrow(new RuntimeException("Redis error"));
         when(chatMessageRepository.findTop100ByStreamIdAndIsDeletedFalseOrderByCreatedAtDesc(anyLong()))
                 .thenReturn(java.util.List.of(dbMessage));
-
-        // Act - Should not throw, should fallback to DB
         var result = chatService.getRecentMessages(streamKey);
-
-        // Assert
         assertNotNull(result);
         assertEquals(1, result.size());
         verify(chatMessageRepository, times(1))
@@ -1155,7 +1086,6 @@ class ChatServiceTest {
 
     @Test
     void deleteMessage_WithoutRedis_Success() {
-        // Arrange - Remove Redis
         ReflectionTestUtils.setField(chatService, "redisTemplate", null);
 
         Long messageId = 1L;
@@ -1182,11 +1112,7 @@ class ChatServiceTest {
                 .thenReturn(true);
         when(chatMessageRepository.save(any(ChatMessage.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // Act
         chatService.deleteMessage(messageId, deletedByUsername);
-
-        // Assert
         verify(chatMessageRepository).save(argThat(msg ->
                 msg.getIsDeleted() && msg.getDeletedBy().getId().equals(2L)
         ));
@@ -1195,14 +1121,11 @@ class ChatServiceTest {
 
     @Test
     void deleteMessage_MessageNotFound_ThrowsException() {
-        // Arrange
         Long messageId = 999L;
         String deletedByUsername = "moderator";
 
         when(chatMessageRepository.findById(messageId))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 chatService.deleteMessage(messageId, deletedByUsername));
 
@@ -1211,7 +1134,6 @@ class ChatServiceTest {
 
     @Test
     void deleteMessage_ModeratorNotFound_ThrowsException() {
-        // Arrange
         Long messageId = 1L;
         String deletedByUsername = "non-existent-moderator";
 
@@ -1227,8 +1149,6 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(message));
         when(userRepository.findByUsername(deletedByUsername))
                 .thenReturn(Optional.empty());
-
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 chatService.deleteMessage(messageId, deletedByUsername));
 

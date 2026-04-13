@@ -8,17 +8,19 @@ services:
     container_name: stream-chat-app
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/stream_chat_db
-      SPRING_DATASOURCE_USERNAME: stream_chat_user
-      SPRING_DATASOURCE_PASSWORD: secure_password_123
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USERNAME:-stream_chat_user}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-secure_password_123}
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQL10Dialect
       JWT_SECRET: ${JWT_SECRET:-super-secret-key-change-in-production-must-be-64-chars-minimum-length}
-      JWT_EXPIRATION: 86400000
-      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:8080
-      SPRING_PROFILES_ACTIVE: prod
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,7 +29,7 @@ services:
     networks:
       - stream-chat-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/streams"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
       timeout: 5s
       retries: 3

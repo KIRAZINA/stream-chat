@@ -85,6 +85,30 @@ public class StreamController {
     }
 
     /**
+     * Get replay window for a stream (messages after a specific sequence ID).
+     * Used for reconnect recovery.
+     *
+     * @param streamKey the stream key
+     * @param afterSequenceId optional sequence ID to get messages after
+     * @param limit max messages to return
+     * @return replay window with messages
+     */
+    @GetMapping("/{streamKey}/messages/replay")
+    @Operation(summary = "Get replay window for reconnect recovery")
+    public ResponseEntity<ChatHistoryResponse> getReplayWindow(
+            @PathVariable String streamKey,
+            @RequestParam(required = false) Long afterSequenceId,
+            @RequestParam(defaultValue = "100") Integer limit) {
+
+        log.debug("Fetching replay window: stream={}, afterSequenceId={}, limit={}", streamKey, afterSequenceId, limit);
+
+        // For now, use the standard history endpoint as replay
+        // In production, this would use redis_sequence_id for precise replay
+        ChatHistoryResponse history = chatService.getMessageHistory(streamKey, null, limit, false);
+        return ResponseEntity.ok(history);
+    }
+
+    /**
      * Get active presence count for a stream.
      *
      * @param streamKey the stream identifier

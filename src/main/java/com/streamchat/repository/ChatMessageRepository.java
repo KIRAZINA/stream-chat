@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Repository for ChatMessage entity operations.
@@ -56,6 +57,11 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
      * @return list of messages
      */
     List<ChatMessage> findByStreamIdAndUserId(Long streamId, Long userId);
+
+    /**
+     * Find message by idempotency key.
+     */
+    Optional<ChatMessage> findByIdempotencyKey(String idempotencyKey);
 
     /**
      * Count messages by user in a time window.

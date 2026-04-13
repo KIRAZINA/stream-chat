@@ -123,13 +123,7 @@ public class EmoteService {
         return token == null ? "" : token.replaceAll("^:+|:+$", "");
     }
 
-    /**
-     * Get all emotes for a stream.
-     *
-     * @param streamId the stream ID
-     * @return list of emotes
-     */
-    public List<Emote> getStreamEmotes(Long streamId) {
+        public List<Emote> getStreamEmotes(Long streamId) {
         return emoteRepository.findByStreamIdOrGlobal(streamId);
     }
 }
