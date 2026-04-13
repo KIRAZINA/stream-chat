@@ -35,16 +35,14 @@ ALTER TABLE chat_messages
     FOREIGN KEY (pinned_by) REFERENCES users(id);
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_pinned
-    ON chat_messages(stream_id, is_pinned)
-    WHERE is_pinned = TRUE;
+    ON chat_messages(stream_id, is_pinned);
 
 -- 3. Message deduplication idempotency key
 ALTER TABLE chat_messages
     ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(64) UNIQUE;
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_idempotency
-    ON chat_messages(idempotency_key)
-    WHERE idempotency_key IS NOT NULL;
+    ON chat_messages(idempotency_key);
 
 -- 4. User reputation score for trust levels
 ALTER TABLE users
@@ -61,5 +59,4 @@ ALTER TABLE chat_messages
     ADD COLUMN IF NOT EXISTS redis_sequence_id BIGINT;
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_sequence
-    ON chat_messages(stream_id, redis_sequence_id)
-    WHERE redis_sequence_id IS NOT NULL;
+    ON chat_messages(stream_id, redis_sequence_id);

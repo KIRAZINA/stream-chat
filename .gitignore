@@ -57,3 +57,4 @@ replay_pid*
 
 ### Maven ###
 .mvn/timing.properties
+/.qwen/
