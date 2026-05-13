@@ -1,5 +1,7 @@
 ### Build output ###
 target/
+dist/
+build/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/build/
@@ -7,24 +9,33 @@ target/
 ### Local environment & secrets (DO NOT COMMIT) ###
 .env
 !.env.example
+.env.local
+.env.*.local
 *.jks
 *.p12
 *.pfx
 *.keystore
 
-### Logs & runtime files ###
-*.log
-logs/
-*.pid
-*.pid.lock
-*.seed
-
-### IDEs ###
+### IDE & Editor ###
 .idea/
+.vscode/
 *.iws
 *.iml
 *.ipr
+*.swp
+*.swo
+*~
+.DS_Store
 out/
+
+### Java ###
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
 .apt_generated
 .classpath
 .factorypath
@@ -32,20 +43,37 @@ out/
 .settings
 .springBeans
 .sts4-cache
-nbproject/private/
-nbbuild/
-dist/
-nbdist/
-.nb-gradle/
-build/
-!**/src/main/**/build/
 
-### Editor / tools ###
-.vscode/
-.qwen/
+### Node & Frontend ###
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+npm-debug.log
+yarn-error.log
+.pnp
+.pnp.js
+
+### Logs & Runtime ###
+*.log
+logs/
+*.pid
+*.pid.lock
+*.seed
+.gradle/
 
 ### OS ###
 Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+### Other ###
+.qwen/
+nbproject/private/
+nbbuild/
+nbdist/
+.nb-gradle/
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/

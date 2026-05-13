@@ -1,103 +1,87 @@
 # Stream Chat Platform
 
-Production-ready Spring Boot backend for real-time stream chat. Supports WebSocket messaging, JWT auth, moderation, rate limiting, emotes, horizontal scaling via Redis, audit logging, pinned messages, and idempotent publishing.
+Real-time chat system for live streaming. Built with Spring Boot backend and React frontend. Similar to Twitch/YouTube Live chat with moderation, WebSocket support, and JWT auth.
 
 ## Features
 
-- Real-time messaging via STOMP over SockJS
-- JWT authentication with token refresh
-- Moderation: timeout, ban, unban, message deletion, pin/unpin
-- Rate limiting per role (regular 20/min, subscriber 50/min, mod/broadcaster 100/min)
-- Chat modes: slow mode, subscribers-only, followers-only, emote-only
-- AutoMod with spam detection, shadow banning, trust scores
-- Horizontal scaling via Redis pub/sub
-- Idempotent message publishing (deduplication by idempotency key)
-- Message replay endpoint for reconnect recovery
-- Audit logging for all moderation actions
-- Automated data retention cleanup (messages 90 days, audit logs 365 days)
-- Pinned messages for announcements
-- User reputation system (schema ready)
-- Prometheus metrics + health checks
-
-## Tech Stack
-
-- Java 17, Spring Boot 3.2.1
-- PostgreSQL, Redis, Flyway
-- JJWT 0.12, MapStruct, Lombok
-- Micrometer (Prometheus), Logback structured logging
-- Testcontainers for integration tests
+- 💬 Real-time messaging via WebSocket (STOMP)
+- 🔐 JWT authentication
+- 🛡️ Moderation tools (timeout, ban, delete messages)
+- ⚡ Rate limiting per user role
+- 🎭 User roles (Broadcaster, Moderator, VIP, Subscriber)
+- 📊 Chat modes (slow mode, followers-only, subscribers-only)
+- 🚀 Scalable with Redis pub/sub
+- 📝 Message history & replay for reconnects
+- 🔍 Audit logging for all moderation actions
 
 ## Quick Start
 
-### Dev (H2 in-memory)
+### Backend (Spring Boot)
 
 ```bash
-mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"
+mvn spring-boot:run
 ```
 
-Chat client: `http://localhost:8080/chat.html`
-Swagger UI: `http://localhost:8080/swagger-ui.html`
+Runs on `http://localhost:8080` with H2 in-memory database for development.
 
-### Docker Compose (PostgreSQL + Redis)
+### Frontend (React + Vite)
 
 ```bash
-cp .env.example .env   # edit values as needed
-docker-compose up -d
+cd frontend
+npm install
+npm run dev
 ```
 
-## Configuration
+Runs on `http://localhost:5173` and connects to backend at `http://localhost:8080/api`.
 
-Copy `.env.example` to `.env` and fill in values. Key variables:
+## API Docs
 
-| Variable | Required | Description |
-|---|---|---|
-| `JWT_SECRET` | Yes | HMAC signing key, 64+ characters |
-| `DATABASE_URL` | prod | `jdbc:postgresql://host:5432/dbname` |
-| `DATABASE_USERNAME` | prod | DB username |
-| `DATABASE_PASSWORD` | prod | DB password |
-| `REDIS_HOST` | prod | Redis host |
-| `CORS_ALLOWED_ORIGINS` | Optional | Comma-separated origins |
+Swagger UI available at `http://localhost:8080/swagger-ui.html`
 
-Spring profiles: `dev` (H2), `prod` (PostgreSQL + Redis via env vars).
+### Main Endpoints
 
-## API
+- **POST** `/api/auth/register` - Register new user
+- **POST** `/api/auth/login` - Login and get JWT
+- **GET** `/api/users/me` - Get current user profile
+- **GET/POST** `/api/streams` - Stream management
+- **GET** `/api/streams/{id}/messages` - Chat history
+- **POST/GET** `/api/streams/{id}/moderate/*` - Moderation
 
-### Auth
+## Tech Stack
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/auth/register` | Register user, returns JWT |
-| POST | `/api/auth/login` | Login, returns JWT |
-| POST | `/api/auth/refresh` | Refresh token (authenticated) |
+**Backend:**
+- Java 17, Spring Boot 3.2.1
+- PostgreSQL, Redis, H2
+- JJWT authentication
+- Flyway migrations
 
-### Streams
+**Frontend:**
+- React 18, TypeScript
+- Vite, Tailwind CSS
+- @stomp/stompjs for WebSocket
+- Zustand for state management
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/api/streams` | — | List live streams |
-| GET | `/api/streams/{key}` | — | Stream details |
-| GET | `/api/streams/{key}/messages` | — | Chat history (pagination, cursor) |
-| GET | `/api/streams/{key}/messages/replay` | — | Replay window for reconnect |
-| GET | `/api/streams/{key}/presence` | — | Active viewer count |
-| POST | `/api/streams` | Yes | Create stream |
-| PUT | `/api/streams/{key}` | Yes | Update stream |
-| POST | `/api/streams/{key}/start` | Yes | Go live |
-| POST | `/api/streams/{key}/stop` | Yes | End stream |
-| DELETE | `/api/streams/{key}` | Yes | Delete stream |
+## Setup for Production
 
-### Settings
+1. Copy `.env.example` to `.env` and set your values
+2. Use Docker: `docker-compose up -d`
+3. Or set Spring profile to `prod` and provide environment variables
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/api/streams/{key}/settings` | Yes | Get chat settings |
-| PUT | `/api/streams/{key}/settings` | Yes | Update settings |
+## Testing
 
-### Moderation
+Backend tests with Maven:
+```bash
+mvn test
+```
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/api/streams/{key}/moderate/timeout` | Mod | Timeout user |
-| POST | `/api/streams/{key}/moderate/ban` | Mod | Ban user |
+Frontend tests:
+```bash
+cd frontend && npm test
+```
+
+## License
+
+MIT
 | DELETE | `/api/streams/{key}/moderate/ban/{userId}` | Mod | Unban user |
 | DELETE | `/api/streams/{key}/moderate/messages/{msgId}` | Mod | Delete message |
 | DELETE | `/api/streams/{key}/moderate/messages/user/{userId}` | Mod | Delete all messages by user |
@@ -156,6 +140,28 @@ mvn test -Dtest=ChatServiceTest  # single class
 2. `docker-compose up -d`
 3. Health check: `curl http://localhost:8080/actuator/health`
 4. Metrics: `/actuator/prometheus`
+
+## Frontend
+
+The React frontend is located in `frontend/`.
+
+Development:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Production build:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+The frontend can also run in Docker through `docker-compose` on port `3000`.
 
 ## Project Structure
 

@@ -35,6 +35,18 @@ services:
       retries: 3
       start_period: 40s
 
+  stream-chat-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: stream-chat-frontend
+    ports:
+      - "3000:80"
+    networks:
+      - stream-chat-network
+    depends_on:
+      - stream-chat-app
+
   postgres:
     image: postgres:15-alpine
     container_name: stream-chat-postgres

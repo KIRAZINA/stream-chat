@@ -9,6 +9,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 import java.util.Random;
 
 /**
@@ -113,6 +115,16 @@ public class UserService {
         int g = random.nextInt(256);
         int b = random.nextInt(256);
         return String.format("#%02X%02X%02X", r, g, b);
+    }
+
+    /**
+     * Find user by username.
+     *
+     * @param username the username
+     * @return optional user
+     */
+    public Optional<User> findByUsername(String username) {
+        return userRepository.findByUsername(username);
     }
 
     /**
