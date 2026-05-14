@@ -1,21 +1,24 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    global: "window",
+  },
   server: {
     port: 5173,
     host: true,
     proxy: {
-      '/api': {
-        target: ':8080',
-        changeOrigin: true
+      "/api": {
+        target: process.env.VITE_API_URL || "http://localhost:8080",
+        changeOrigin: true,
       },
-      '/ws-chat': {
-        target: ':8080',
+      "/ws-chat": {
+        target: process.env.VITE_API_URL || "http://localhost:8080",
         ws: true,
-        changeOrigin: true
-      }
-    }
-  }
+        changeOrigin: true,
+      },
+    },
+  },
 });

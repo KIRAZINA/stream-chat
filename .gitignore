@@ -66,6 +66,8 @@ logs/
 Thumbs.db
 .DS_Store
 .AppleDouble
+.cursor
+.github
 .LSOverride
 
 ### Other ###

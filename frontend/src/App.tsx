@@ -1,12 +1,12 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage';
-import StreamPage from './pages/StreamPage';
-import { NotFoundPage } from './pages/NotFoundPage';
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import { useAuthStore } from './stores/auth-store';
+import { Navigate, Route, Routes } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
+import { LoginPage } from "./pages/LoginPage";
+import { RegisterPage } from "./pages/RegisterPage";
+import DashboardPage from "./pages/DashboardPage";
+import StreamPage from "./pages/StreamPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
+import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { useAuthStore } from "./stores/auth-store";
 
 function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated());
@@ -18,16 +18,22 @@ function App() {
         toastOptions={{
           duration: 3500,
           style: {
-            background: '#1e293b',
-            color: '#f1f5f9',
-            border: '1px solid #334155',
+            background: "#1e293b",
+            color: "#f1f5f9",
+            border: "1px solid #334155",
           },
         }}
       />
       <Routes>
         <Route
           path="/"
-          element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" />
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
         />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />

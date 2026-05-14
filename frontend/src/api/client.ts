@@ -1,15 +1,15 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { useAuthStore } from '../stores/auth-store';
-import toast from 'react-hot-toast';
+import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import { useAuthStore } from "../stores/auth-store";
+import toast from "react-hot-toast";
 
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
 const api = axios.create({
-   baseURL: import.meta.env.VITE_API_URL ?? '/api',
-   headers: { 'Content-Type': 'application/json' },
-   withCredentials: true
+  baseURL: import.meta.env.VITE_API_URL ?? "/api",
+  headers: { "Content-Type": "application/json" },
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
@@ -25,7 +25,11 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as RetriableRequestConfig | undefined;
 
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry
+    ) {
       originalRequest._retry = true;
       const { refresh } = useAuthStore.getState();
       const refreshed = await refresh();
@@ -36,11 +40,11 @@ api.interceptors.response.use(
         return api(originalRequest);
       }
 
-      toast.error('Session expired. Please sign in again.');
+      toast.error("Session expired. Please sign in again.");
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
