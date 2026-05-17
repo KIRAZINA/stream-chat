@@ -12,7 +12,7 @@ export function useStreamSettings(streamKey: string) {
 
   const { data: settings, isLoading, error } = useQuery({
     queryKey: ['stream', streamKey, 'settings'],
-    queryFn: () => streamsApi.getSettings(streamKey).then((res) => res.data),
+    queryFn: () => streamsApi.getSettings(streamKey),
     enabled: !!streamKey
   });
 

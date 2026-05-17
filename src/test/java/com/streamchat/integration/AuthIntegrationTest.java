@@ -49,7 +49,7 @@ class AuthIntegrationTest {
                                 "password", "password123"
                         ))))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.message").value("Registration successful. Please login."))
                 .andExpect(jsonPath("$.username").value("alice"));
 
         mockMvc.perform(post("/api/auth/login")

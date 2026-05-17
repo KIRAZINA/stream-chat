@@ -29,9 +29,9 @@ const StreamPage = () => {
     }
   }, [streamQuery.data]);
 
-  if (!streamKey) {
-    return <div className="p-6 text-slate-200">Неверный ключ стрима.</div>;
-  }
+   if (!streamKey) {
+     return <div className="p-6 text-slate-200">Invalid stream key.</div>;
+   }
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors">

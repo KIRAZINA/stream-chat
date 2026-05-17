@@ -554,7 +554,7 @@ public class ChatService {
 
     private ChatMessageDTO convertToDTO(ChatMessage message) {
         String content = message.getIsDeleted() != null && message.getIsDeleted()
-                ? "Сообщение удалено"
+                 ? "Message deleted"
                 : message.getContent();
 
         List<MessageFragmentDTO> fragments = message.getIsDeleted() != null && message.getIsDeleted()

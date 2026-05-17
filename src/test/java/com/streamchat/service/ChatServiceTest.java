@@ -999,7 +999,7 @@ class ChatServiceTest {
         assertEquals(1, result.getMessages().size());
         assertTrue(result.getMessages().get(0).getIsDeleted());
         assertEquals(MessageType.DELETED, result.getMessages().get(0).getMessageType());
-        assertEquals("Сообщение удалено", result.getMessages().get(0).getContent());
+        assertEquals("Message deleted", result.getMessages().get(0).getContent());
     }
 
     @Test

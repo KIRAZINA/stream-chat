@@ -91,8 +91,8 @@ class StreamServiceTest {
         assertNotNull(result.getStreamKey());
         assertEquals(title, result.getTitle());
         assertEquals(description, result.getDescription());
-        assertFalse(result.getIsLive());
-        assertEquals(testUser.getId(), result.getUserId());
+        assertEquals("OFFLINE", result.getStatus());
+        assertEquals(testUser.getId(), result.getOwnerId());
         verify(streamRepository).save(any(Stream.class));
         verify(streamSettingsRepository).save(any(StreamSettings.class));
     }
@@ -331,7 +331,7 @@ class StreamServiceTest {
         List<StreamDTO> result = streamService.getLiveStreams();
         assertNotNull(result);
         assertEquals(2, result.size());
-        assertTrue(result.stream().allMatch(StreamDTO::getIsLive));
+        assertTrue(result.stream().allMatch(dto -> "LIVE".equals(dto.getStatus())));
     }
 
     @Test
@@ -354,7 +354,7 @@ class StreamServiceTest {
         assertEquals(testStream.getId(), result.getId());
         assertEquals(testStream.getStreamKey(), result.getStreamKey());
         assertEquals(testStream.getTitle(), result.getTitle());
-        assertEquals(testStream.getUser().getId(), result.getUserId());
+        assertEquals(testStream.getUser().getId(), result.getOwnerId());
     }
 
     @Test

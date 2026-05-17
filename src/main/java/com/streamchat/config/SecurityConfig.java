@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -68,18 +69,23 @@ public class SecurityConfig {
                                 "/chat.html",
                                 "/api/auth/**",
                                 "/ws-chat/**",
-                                "/api/streams",
-                                "/api/streams/*",
-                                "/api/streams/*/messages",
-                                "/api/streams/*/presence",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/h2-console/**",
                                 "/actuator/**"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/streams",
+                                "/api/streams/*",
+                                "/api/streams/*/messages",
+                                "/api/streams/*/messages/replay",
+                                "/api/streams/*/presence"
+                        ).permitAll()
 
                         // Authenticated endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/streams")
+                        .authenticated()
                         .requestMatchers("/api/streams/*/moderate/**")
                         .authenticated()
                         .requestMatchers("/api/streams/*/settings")

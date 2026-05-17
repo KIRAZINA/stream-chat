@@ -935,7 +935,7 @@
                     msgEl.classList.add('deleted');
                     const contentEl = msgEl.querySelector('.content');
                     if (contentEl) {
-                        contentEl.textContent = 'Сообщение удалено';
+                        contentEl.textContent = 'Message deleted';
                     }
                 }
             } else if (action.action === 'DELETE_USER_MESSAGES') {
@@ -1045,7 +1045,7 @@
             html += '<span class="username" style="color: #6b6b7a;">' + escapeHtml(msg.username) + '</span>';
             html += '<span class="timestamp">' + time + '</span>';
             html += '</div>';
-            html += '<div class="content" style="font-style: italic; color: #6b6b7a;">Сообщение удалено' +
+             html += '<div class="content" style="font-style: italic; color: #6b6b7a;">Message deleted' +
                     (msg.deletedByUsername ? ' by ' + escapeHtml(msg.deletedByUsername) : '') +
                     '</div>';
             return html;

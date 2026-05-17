@@ -48,7 +48,7 @@ class AuthControllerTest {
     private UserService userService;
 
     @Test
-    void register_success_returnsCreatedAndToken() throws Exception {
+    void register_success_returnsCreatedMessage() throws Exception {
         RegisterRequest request = RegisterRequest.builder()
                 .username("alice")
                 .email("alice@example.com")
@@ -65,19 +65,13 @@ class AuthControllerTest {
 
         when(userService.registerUser(eq("alice"), eq("alice@example.com"), eq("password123")))
                 .thenReturn(user);
-        when(authenticationManager.authenticate(any(Authentication.class)))
-                .thenReturn(authentication);
-        when(tokenProvider.generateToken(eq(authentication)))
-                .thenReturn("jwt-token");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.token").value("jwt-token"))
-                .andExpect(jsonPath("$.type").value("Bearer"))
-                .andExpect(jsonPath("$.username").value("alice"))
-                .andExpect(jsonPath("$.email").value("alice@example.com"));
+                .andExpect(jsonPath("$.message").value("Registration successful. Please login."))
+                .andExpect(jsonPath("$.username").value("alice"));
     }
 
     @Test
@@ -137,8 +131,8 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.status").value(500));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     @Test

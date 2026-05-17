@@ -9,10 +9,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 /**
  * REST controller for authentication operations.
@@ -32,47 +35,31 @@ public class AuthController {
      * Register a new user.
      *
      * @param request registration details
-     * @return authentication response with JWT token
+     * @return success message without authentication
      */
-    @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        log.info("Registration attempt: username={}", request.getUsername());
-
-        try {
-            // Register user
-            UserDTO user = userService.registerUser(
-                    request.getUsername(),
-                    request.getEmail(),
-                    request.getPassword()
-            );
-
-            // Authenticate user
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            request.getUsername(),
-                            request.getPassword()
-                    )
-            );
-
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-
-            // Generate JWT token
-            String token = tokenProvider.generateToken(authentication);
-
-            AuthResponse response = AuthResponse.builder()
-                    .token(token)
-                    .username(user.getUsername())
-                    .email(user.getEmail())
-                    .build();
-
-            log.info("User registered successfully: username={}", request.getUsername());
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-
-        } catch (RuntimeException e) {
-            log.error("Registration failed: {}", e.getMessage());
-            throw e;
-        }
-    }
+     @PostMapping("/register")
+         public ResponseEntity<Map<String, String>> register(@Valid @RequestBody RegisterRequest request) {
+             log.info("Registration attempt: username={}", request.getUsername());
+     
+             try {
+                 // Register user only (no auto-login)
+                 UserDTO user = userService.registerUser(
+                         request.getUsername(),
+                         request.getEmail(),
+                         request.getPassword()
+                 );
+     
+                 log.info("User registered successfully: username={}", request.getUsername());
+                 return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                         "message", "Registration successful. Please login.",
+                         "username", user.getUsername()
+                 ));
+     
+             } catch (RuntimeException e) {
+                 log.error("Registration failed: {}", e.getMessage());
+                 throw e;
+             }
+         }
 
     /**
      * Authenticate user and generate JWT token.
@@ -80,41 +67,45 @@ public class AuthController {
      * @param request login credentials
      * @return authentication response with JWT token
      */
-    @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {
-        log.info("Login attempt: username={}", request.getUsername());
+     @PostMapping("/login")
+         public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {
+             log.info("Login attempt: username={}", request.getUsername());
+     
+             try {
+                 // Authenticate user
+                 Authentication authentication = authenticationManager.authenticate(
+                         new UsernamePasswordAuthenticationToken(
+                                 request.getUsername(),
+                                 request.getPassword()
+                         )
+                 );
+     
+                 SecurityContextHolder.getContext().setAuthentication(authentication);
+     
+                  // Generate tokens
+                  String accessToken = tokenProvider.generateToken(authentication);
+                  String refreshToken = tokenProvider.generateToken(authentication.getName()); // Generate refresh token
 
-        try {
-            // Authenticate user
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            request.getUsername(),
-                            request.getPassword()
-                    )
-            );
+                  // Get user details
+                  UserDTO user = userService.getUserByUsername(request.getUsername());
 
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-
-            // Generate JWT token
-            String token = tokenProvider.generateToken(authentication);
-
-            // Get user details
-            UserDTO user = userService.getUserByUsername(request.getUsername());
-
-            AuthResponse response = AuthResponse.builder()
-                    .token(token)
-                    .username(user.getUsername())
-                    .email(user.getEmail())
-                    .build();
-
-            log.info("User logged in successfully: username={}", request.getUsername());
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            log.error("Login failed: {}", e.getMessage());
-            throw new RuntimeException("Invalid username or password");
-        }
-    }
+                  AuthResponse response = AuthResponse.builder()
+                          .token(accessToken)
+                          .refreshToken(refreshToken) // Set refresh token
+                          .type("Bearer")
+                          .username(user.getUsername())
+                          .email(user.getEmail())
+                          .expiresIn(tokenProvider.getExpirationMs() / 1000) // Time in seconds
+                          .build();
+     
+                 log.info("User logged in successfully: username={}", request.getUsername());
+                 return ResponseEntity.ok(response);
+     
+             } catch (Exception e) {
+                 log.error("Login failed: {}", e.getMessage());
+                 throw new BadCredentialsException("Invalid username or password");
+             }
+         }
 
     /**
      * Refresh JWT token.

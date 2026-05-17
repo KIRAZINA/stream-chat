@@ -6,8 +6,13 @@ interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
+const normalizeApiBaseUrl = (value?: string) => {
+  const baseUrl = value?.replace(/\/+$/, "") || "/api";
+  return baseUrl.endsWith("/api") ? baseUrl : `${baseUrl}/api`;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "/api",
+  baseURL: normalizeApiBaseUrl(import.meta.env.VITE_API_URL),
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });

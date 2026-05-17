@@ -24,7 +24,7 @@ export class StreamStompClient {
   async connect(): Promise<void> {
     if (!this.client.webSocketFactory) {
       this.client.configure({ 
-        webSocketFactory: () => new SockJS(`${this.wsBaseUrl}/ws-chat`),
+        webSocketFactory: () => new SockJS(buildSockJsUrl(this.wsBaseUrl)),
         connectHeaders: this.connectHeaders,
       });
     }
@@ -51,4 +51,15 @@ export class StreamStompClient {
   isConnected(): boolean {
     return this.client.connected;
   }
+}
+
+function buildSockJsUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  if (!trimmed || trimmed === ".") {
+    return "/ws-chat";
+  }
+  if (trimmed.endsWith("/ws-chat")) {
+    return trimmed;
+  }
+  return `${trimmed}/ws-chat`;
 }

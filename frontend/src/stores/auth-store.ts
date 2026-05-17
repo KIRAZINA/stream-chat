@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create, type StateCreator, type StoreApi, type UseBoundStore } from "zustand";
 import { persist } from "zustand/middleware";
 import { AuthResponse, UserProfileDTO } from "../types/backend";
 import api from "../api/client";
@@ -17,7 +17,7 @@ interface AuthState {
   canModerate: (streamKey: string) => boolean;
 }
 
-const createAuthState = (set: any, get: any) => ({
+const createAuthState: StateCreator<AuthState> = (set, get) => ({
   user: null,
   token: null,
   refreshToken: null,
@@ -42,7 +42,7 @@ const createAuthState = (set: any, get: any) => ({
 
   refresh: async () => {
     try {
-      const { data } = await api.post<AuthResponse>("/api/auth/refresh", {
+      const { data } = await api.post<AuthResponse>("/auth/refresh", {
         refreshToken: get().refreshToken,
       });
       await get().login(data); // re-fetch profile
@@ -73,7 +73,7 @@ const createAuthState = (set: any, get: any) => ({
   },
 });
 
-let useAuthStore: any;
+let useAuthStore: UseBoundStore<StoreApi<AuthState>>;
 
 try {
   useAuthStore = create<AuthState>()(

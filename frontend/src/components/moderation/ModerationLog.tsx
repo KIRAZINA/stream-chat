@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { moderationApi } from '../../api/moderation';
 import { formatTimestamp } from '../../utils/time';
-import { ModerationLog } from '../../types/backend';
+import type { ModerationLog } from '../../types/backend';
 
 interface ModerationLogProps {
   streamKey: string;

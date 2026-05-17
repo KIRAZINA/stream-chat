@@ -24,4 +24,6 @@ public class StreamRequest {
 
     @Size(max = 1000, message = "Description must be at most 1000 characters")
     private String description;
+
+    private String category;
 }

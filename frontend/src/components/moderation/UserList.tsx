@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { streamsApi } from '../../api/streams';
-import { UserStreamRole } from '../../types/backend';
+import { moderationApi } from '../../api/moderation';
 
 interface StreamModerator {
   id: number;
@@ -12,7 +11,7 @@ interface StreamModerator {
 export default function UserList({ streamKey }: { streamKey: string }) {
   const [users, setUsers] = useState<StreamModerator[]>([]);
   useEffect(() => {
-    streamsApi.getModerators(streamKey).then(r => setUsers(r.data));
+    moderationApi.getModerators(streamKey).then((roles) => setUsers(roles as unknown as StreamModerator[]));
   }, [streamKey]);
 
   return (

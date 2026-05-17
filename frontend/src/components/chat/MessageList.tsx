@@ -46,7 +46,7 @@ export default function MessageList({ messages, currentUserId, onRequestContextM
       <div aria-live="polite" className="space-y-1">
         {messages.map((msg, i) => (
           <MessageItem 
-            key={msg.id || i} 
+            key={getMessageKey(msg, i)}
             message={msg} 
             showAvatar={shouldShowAvatar(i)}
             onRequestContextMenu={onRequestContextMenu}
@@ -61,4 +61,11 @@ export default function MessageList({ messages, currentUserId, onRequestContextM
       )}
     </div>
   );
+}
+
+function getMessageKey(message: ChatMessageDTO, index: number): string {
+  if (message.idempotencyKey) return `idem-${message.idempotencyKey}`;
+  if (message.redisSequenceId) return `seq-${message.redisSequenceId}`;
+  if (message.id) return `id-${message.id}-${index}`;
+  return `local-${message.timestamp}-${message.username}-${index}`;
 }

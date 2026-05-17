@@ -9,13 +9,11 @@ import toast from 'react-hot-toast';
 import { register as registerApi } from '../../api/auth';
 import { registerSchema } from '../../utils/validation';
 import type { RegisterRequest } from '../../types/backend';
-import { useAuthStore } from '../../stores/auth-store';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
 export function RegisterForm() {
   const navigate = useNavigate();
-  const loginAction = useAuthStore((state) => state.login);
 
   const {
     register,
@@ -25,10 +23,9 @@ export function RegisterForm() {
 
   const onSubmit = async (values: RegisterRequest) => {
     try {
-      const response = await registerApi(values);
-      loginAction(response);
-      toast.success('Registration successful');
-      navigate('/dashboard');
+      await registerApi(values);
+      toast.success('Registration successful. Please login.');
+      navigate('/login');
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Registration failed. Please try again.');
     }

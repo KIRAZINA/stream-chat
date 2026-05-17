@@ -16,11 +16,12 @@ public class StreamDTO {
 
     private Long id;
     private String streamKey;
-    private Long userId;
-    private String username;
+    private Long ownerId;
+    private String ownerUsername;
     private String title;
     private String description;
-    private Boolean isLive;
+    private String status;
+    private String category;
     private Integer viewerCount;
     private LocalDateTime startedAt;
     private LocalDateTime createdAt;

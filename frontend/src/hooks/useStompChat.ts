@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuthStore } from "../stores/auth-store";
 import { StreamStompClient } from "../services/stomp-client";
 import { streamsApi } from "../api/streams";
@@ -14,6 +14,7 @@ const getStompClient = (): StreamStompClient => {
 
 export function useStompChat(streamKey: string) {
   const { token } = useAuthStore();
+  const stompClientRef = useRef<StreamStompClient | null>(null);
   const [messages, setMessages] = useState<ChatMessageDTO[]>([]);
   const [connectionState, setConnectionState] = useState<
     "disconnected" | "connecting" | "connected"
@@ -27,50 +28,60 @@ export function useStompChat(streamKey: string) {
       return;
     }
 
-    let stompClient: StreamStompClient | null = null;
+    let isDisposed = false;
+    let unsubscribe: (() => void) | undefined;
+    let client: StreamStompClient | null = null;
 
-    const connectAndSubscribe = async () => {
+    const connectAndSubscribe = async (): Promise<void> => {
       try {
-        stompClient = getStompClient();
-        stompClient.setAuthToken(token);
+        client = getStompClient();
+        stompClientRef.current = client;
+        client.setAuthToken(token);
         setConnectionState("connecting");
         setError(null);
 
-        await stompClient.connect();
+        await client.connect();
+        if (isDisposed) {
+          client.disconnect();
+          return;
+        }
+
         setConnectionState("connected");
 
         // Join the stream
-        stompClient.publish(`/app/chat.join/${streamKey}`, { streamKey });
+        client.publish(`/app/chat.join/${streamKey}`, { streamKey });
 
         // Subscribe to messages
-        const subscription = stompClient.subscribe<ChatMessageDTO>(
+        unsubscribe = client.subscribe<ChatMessageDTO>(
           `/topic/stream/${streamKey}`,
           (msg) => {
-            setMessages((prev) => [...prev, msg]);
+            setMessages((prev) => mergeIncomingMessage(prev, msg));
             if (msg.redisSequenceId) setLastSequenceId(msg.redisSequenceId);
           },
         );
-
-        // Cleanup subscription on unmount or streamKey change
-        return () => {
-          subscription.unsubscribe();
-          if (stompClient) {
-            stompClient.disconnect();
-          }
-        };
       } catch (err) {
+        if (isDisposed) {
+          return;
+        }
         setConnectionState("disconnected");
         setError(err instanceof Error ? err.message : String(err));
-        if (stompClient) {
-          stompClient.disconnect();
+        if (client) {
+          client.disconnect();
         }
       }
     };
 
-    const unsubscribe = connectAndSubscribe();
+    void connectAndSubscribe();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    return unsubscribe;
+    return () => {
+      isDisposed = true;
+      unsubscribe?.();
+      client?.disconnect();
+      if (stompClientRef.current === client) {
+        stompClientRef.current = null;
+      }
+    };
   }, [token, streamKey]);
 
   // Replay on reconnect
@@ -79,7 +90,7 @@ export function useStompChat(streamKey: string) {
       streamsApi
         .getReplayWindow(streamKey, lastSequenceId + 1, 100)
         .then((res) => {
-          const missed = res.data.messages;
+          const missed = res.messages;
           if (missed.length)
             setMessages((prev) => [...prev, ...deduplicate(prev, missed)]);
         })
@@ -89,9 +100,12 @@ export function useStompChat(streamKey: string) {
 
   const sendMessage = useCallback(
     (content: string, replyTo?: number) => {
+      const tempId = `temp-${Date.now()}`;
       try {
-        const stompClient = getStompClient();
-        const tempId = `temp-${Date.now()}`;
+        const stompClient = stompClientRef.current;
+        if (!stompClient?.isConnected()) {
+          throw new Error("Chat is not connected");
+        }
         const optimistic: ChatMessageDTO = {
           id: 0,
           tempId,
@@ -114,7 +128,7 @@ export function useStompChat(streamKey: string) {
         console.error("Failed to send message", err);
         // Remove optimistic message on error
         setMessages((prev) =>
-          prev.filter((m) => !(m as ChatMessageDTO).tempId === tempId),
+          prev.filter((m) => (m as ChatMessageDTO & { tempId?: string }).tempId !== tempId),
         );
       }
     },
@@ -138,4 +152,30 @@ function deduplicate(
       return false;
     return true;
   });
+}
+
+function mergeIncomingMessage(
+  existing: ChatMessageDTO[],
+  incoming: ChatMessageDTO,
+): ChatMessageDTO[] {
+  if (incoming.id && existing.some((message) => message.id === incoming.id)) {
+    return existing;
+  }
+
+  if (incoming.redisSequenceId && existing.some((message) => message.redisSequenceId === incoming.redisSequenceId)) {
+    return existing;
+  }
+
+  if (incoming.idempotencyKey) {
+    const optimisticIndex = existing.findIndex(
+      (message) => !message.id && message.idempotencyKey === incoming.idempotencyKey,
+    );
+    if (optimisticIndex >= 0) {
+      const next = existing.slice();
+      next[optimisticIndex] = incoming;
+      return next;
+    }
+  }
+
+  return [...existing, incoming];
 }

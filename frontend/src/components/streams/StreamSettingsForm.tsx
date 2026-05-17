@@ -45,23 +45,23 @@ const StreamSettingsForm = ({ streamKey }: Props) => {
 
   return (
     <form onSubmit={handleSubmit((values) => updateSettings.mutate(values))} className="grid gap-4 rounded-3xl border border-slate-700 bg-slate-900/90 p-5">
-      <h3 className="text-xl font-semibold text-slate-100">Настройки чата</h3>
-      {isLoading ? <div className="text-slate-400">Загрузка...</div> : null}
-      <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3">
-        <span>Медленный режим</span>
-        <input type="checkbox" {...register('slowModeEnabled')} className="h-5 w-5 rounded border-slate-600 text-sky-500" />
-      </label>
-      <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3">
-        <span>Только подписчики</span>
-        <input type="checkbox" {...register('subscribersOnlyMode')} className="h-5 w-5 rounded border-slate-600 text-sky-500" />
-      </label>
-      <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3">
-        <span>Только эмодзи</span>
-        <input type="checkbox" {...register('emoteOnlyMode')} className="h-5 w-5 rounded border-slate-600 text-sky-500" />
-      </label>
-      <button type="submit" className="w-full rounded-2xl bg-sky-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-400">
-        Сохранить
-      </button>
+       <h3 className="text-xl font-semibold text-slate-100">Chat Settings</h3>
+       {isLoading ? <div className="text-slate-400">Loading...</div> : null}
+       <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3">
+         <span>Slow Mode</span>
+         <input type="checkbox" {...register('slowModeEnabled')} className="h-5 w-5 rounded border-slate-600 text-sky-500" />
+       </label>
+       <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3">
+         <span>Subscribers Only</span>
+         <input type="checkbox" {...register('subscribersOnlyMode')} className="h-5 w-5 rounded border-slate-600 text-sky-500" />
+       </label>
+       <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3">
+         <span>Emotes Only</span>
+         <input type="checkbox" {...register('emoteOnlyMode')} className="h-5 w-5 rounded border-slate-600 text-sky-500" />
+       </label>
+       <button type="submit" className="w-full rounded-2xl bg-sky-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-400">
+         Save
+       </button>
     </form>
   );
 };
