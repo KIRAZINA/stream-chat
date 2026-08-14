@@ -59,6 +59,13 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     List<ChatMessage> findByStreamIdAndUserId(Long streamId, Long userId);
 
     /**
+     * Find messages with redisSequenceId greater than a given value, ordered by id desc.
+     * Used for gap replay on reconnect.
+     */
+    List<ChatMessage> findByStreamIdAndRedisSequenceIdGreaterThanOrderByIdDesc(
+            Long streamId, Long redisSequenceId, Pageable pageable);
+
+    /**
      * Find message by idempotency key.
      */
     Optional<ChatMessage> findByIdempotencyKey(String idempotencyKey);

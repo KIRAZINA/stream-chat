@@ -114,6 +114,22 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handle concurrent-modification conflicts (optimistic-lock exhaustion).
+     */
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflictErrors(ConflictException ex) {
+        log.error("Conflict: {}", ex.getMessage());
+
+        ErrorResponse response = ErrorResponse.builder()
+                .status(HttpStatus.CONFLICT.value())
+                .message(ex.getMessage())
+                .timestamp(LocalDateTime.now())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+    /**
      * Handle illegal argument errors.
      */
     @ExceptionHandler(IllegalArgumentException.class)

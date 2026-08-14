@@ -1,5 +1,6 @@
 package com.streamchat.service;
 
+import com.streamchat.exception.ConflictException;
 import com.streamchat.model.entity.BannedUser;
 import com.streamchat.model.entity.BlockedWord;
 import com.streamchat.model.entity.ModerationLog;
@@ -11,10 +12,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,10 +52,25 @@ class ModerationServiceTest {
     private MetricsService metricsService;
 
     @Mock
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+
+    @Mock
     private RedisTemplate<String, Object> redisTemplate;
 
     @Mock
     private ValueOperations<String, Object> valueOperations;
+
+    @Mock
+    private StreamAuthorizationService streamAuthorizationService;
+
+    @Mock
+    private ModerationPersister moderationPersister;
 
     @InjectMocks
     private ModerationService moderationService;
@@ -74,12 +94,12 @@ class ModerationServiceTest {
 
         // Setup Redis mock for this test
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(timedOutUserRepository.save(any(TimedOutUser.class)))
+        when(moderationPersister.insertTimeout(any(TimedOutUser.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.timeoutUser(streamId, userId, moderatorId, duration, reason);
-        verify(timedOutUserRepository, times(1)).save(any(TimedOutUser.class));
+        verify(moderationPersister, times(1)).insertTimeout(any(TimedOutUser.class));
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
         verify(valueOperations, times(1))
                 .set(eq("timeout:1:2"), eq("1"), anyLong(), eq(TimeUnit.SECONDS));
@@ -94,12 +114,12 @@ class ModerationServiceTest {
 
         // Setup Redis mock for this test
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(bannedUserRepository.save(any(BannedUser.class)))
+        when(moderationPersister.insertBan(any(BannedUser.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.banUser(streamId, userId, moderatorId, true, null, reason);
-        verify(bannedUserRepository, times(1)).save(any(BannedUser.class));
+        verify(moderationPersister, times(1)).insertBan(any(BannedUser.class));
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
         verify(valueOperations, times(1)).set(eq("ban:1:2"), eq("1"));
     }
@@ -114,12 +134,12 @@ class ModerationServiceTest {
 
         // Setup Redis mock for this test
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(bannedUserRepository.save(any(BannedUser.class)))
+        when(moderationPersister.insertBan(any(BannedUser.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.banUser(streamId, userId, moderatorId, false, durationSeconds, reason);
-        verify(bannedUserRepository, times(1)).save(any(BannedUser.class));
+        verify(moderationPersister, times(1)).insertBan(any(BannedUser.class));
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
         verify(valueOperations, times(1))
                 .set(eq("ban:1:2"), eq("1"), anyLong(), eq(TimeUnit.SECONDS));
@@ -131,12 +151,26 @@ class ModerationServiceTest {
         Long userId = 2L;
         Long moderatorId = 3L;
 
+        BannedUser ban = BannedUser.builder()
+                .id(1L)
+                .streamId(streamId)
+                .userId(userId)
+                .bannedById(moderatorId)
+                .isPermanent(true)
+                .build();
+        when(bannedUserRepository.findActiveBanByStreamAndUser(streamId, userId))
+                .thenReturn(Optional.of(ban));
+        when(redisTemplate.delete("ban:1:2")).thenReturn(true);
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.unbanUser(streamId, userId, moderatorId);
-        verify(bannedUserRepository, times(1)).deleteByStreamIdAndUserId(streamId, userId);
+        verify(bannedUserRepository, times(1)).saveAndFlush(ban);
+        assertFalse(ban.getIsPermanent());
+        assertNotNull(ban.getExpiresAt());
+        assertTrue(ban.getExpiresAt().isBefore(LocalDateTime.now().plusSeconds(1)));
         verify(redisTemplate, times(1)).delete(eq("ban:1:2"));
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
+        verify(streamAuthorizationService, times(1)).evictRoleCache(streamId, userId);
     }
 
     @Test
@@ -411,12 +445,12 @@ class ModerationServiceTest {
         int duration = 300;
         String reason = "Spam";
 
-        when(timedOutUserRepository.save(any(TimedOutUser.class)))
+        when(moderationPersister.insertTimeout(any(TimedOutUser.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.timeoutUser(streamId, userId, moderatorId, duration, reason);
-        verify(timedOutUserRepository, times(1)).save(any(TimedOutUser.class));
+        verify(moderationPersister, times(1)).insertTimeout(any(TimedOutUser.class));
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
         verify(redisTemplate, never()).opsForValue();
     }
@@ -432,12 +466,12 @@ class ModerationServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         doThrow(new RuntimeException("Redis error"))
                 .when(valueOperations).set(anyString(), any(), anyLong(), any(TimeUnit.class));
-        when(timedOutUserRepository.save(any(TimedOutUser.class)))
+        when(moderationPersister.insertTimeout(any(TimedOutUser.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.timeoutUser(streamId, userId, moderatorId, duration, reason);
-        verify(timedOutUserRepository, times(1)).save(any(TimedOutUser.class));
+        verify(moderationPersister, times(1)).insertTimeout(any(TimedOutUser.class));
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
     }
 
@@ -450,12 +484,12 @@ class ModerationServiceTest {
         Long moderatorId = 3L;
         String reason = "Harassment";
 
-        when(bannedUserRepository.save(any(BannedUser.class)))
+        when(moderationPersister.insertBan(any(BannedUser.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.banUser(streamId, userId, moderatorId, true, null, reason);
-        verify(bannedUserRepository, times(1)).save(any(BannedUser.class));
+        verify(moderationPersister, times(1)).insertBan(any(BannedUser.class));
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
         verify(redisTemplate, never()).opsForValue();
     }
@@ -470,12 +504,12 @@ class ModerationServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         doThrow(new RuntimeException("Redis error"))
                 .when(valueOperations).set(anyString(), any());
-        when(bannedUserRepository.save(any(BannedUser.class)))
+        when(moderationPersister.insertBan(any(BannedUser.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.banUser(streamId, userId, moderatorId, true, null, reason);
-        verify(bannedUserRepository, times(1)).save(any(BannedUser.class));
+        verify(moderationPersister, times(1)).insertBan(any(BannedUser.class));
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
     }
 
@@ -487,26 +521,94 @@ class ModerationServiceTest {
         Long userId = 2L;
         Long moderatorId = 3L;
 
+        BannedUser ban = BannedUser.builder()
+                .id(1L)
+                .streamId(streamId)
+                .userId(userId)
+                .isPermanent(true)
+                .build();
+        when(bannedUserRepository.findActiveBanByStreamAndUser(streamId, userId))
+                .thenReturn(Optional.of(ban));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.unbanUser(streamId, userId, moderatorId);
-        verify(bannedUserRepository, times(1)).deleteByStreamIdAndUserId(streamId, userId);
+        verify(bannedUserRepository, times(1)).saveAndFlush(ban);
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
         verify(redisTemplate, never()).delete(anyString());
     }
 
     @Test
-    void unbanUser_RedisError_StillDeletesFromDatabase() {
+    void unbanUser_RedisError_StillDeactivatesBan() {
         Long streamId = 1L;
         Long userId = 2L;
         Long moderatorId = 3L;
 
+        BannedUser ban = BannedUser.builder()
+                .id(1L)
+                .streamId(streamId)
+                .userId(userId)
+                .isPermanent(true)
+                .build();
+        when(bannedUserRepository.findActiveBanByStreamAndUser(streamId, userId))
+                .thenReturn(Optional.of(ban));
         when(redisTemplate.delete(anyString()))
                 .thenThrow(new RuntimeException("Redis error"));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.unbanUser(streamId, userId, moderatorId);
-        verify(bannedUserRepository, times(1)).deleteByStreamIdAndUserId(streamId, userId);
+        verify(bannedUserRepository, times(1)).saveAndFlush(ban);
+        verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
+    }
+
+    @Test
+    void unbanUser_NoActiveBan_IsSilentSuccess() {
+        Long streamId = 1L;
+        Long userId = 2L;
+        Long moderatorId = 3L;
+
+        when(bannedUserRepository.findActiveBanByStreamAndUser(streamId, userId))
+                .thenReturn(Optional.empty());
+        moderationService.unbanUser(streamId, userId, moderatorId);
+        verify(bannedUserRepository, never()).saveAndFlush(any(BannedUser.class));
+        verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+        verify(streamAuthorizationService, never()).evictRoleCache(anyLong(), anyLong());
+        verify(redisTemplate, never()).delete(anyString());
+        verify(metricsService, never()).recordModerationAction(anyString());
+    }
+
+    @Test
+    void unbanUser_OptimisticLockRetry_ThenSuccess() {
+        Long streamId = 1L;
+        Long userId = 2L;
+        Long moderatorId = 3L;
+
+        BannedUser ban = BannedUser.builder()
+                .id(1L)
+                .streamId(streamId)
+                .userId(userId)
+                .bannedById(moderatorId)
+                .isPermanent(true)
+                .build();
+        BannedUser refreshed = BannedUser.builder()
+                .id(1L)
+                .streamId(streamId)
+                .userId(userId)
+                .bannedById(moderatorId)
+                .isPermanent(true)
+                .build();
+        when(bannedUserRepository.findActiveBanByStreamAndUser(streamId, userId))
+                .thenReturn(Optional.of(ban), Optional.of(refreshed));
+        when(bannedUserRepository.saveAndFlush(any(BannedUser.class)))
+                .thenThrow(new ObjectOptimisticLockingFailureException("concurrent update", 1L))
+                .thenReturn(refreshed);
+        when(moderationLogRepository.save(any(ModerationLog.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        moderationService.unbanUser(streamId, userId, moderatorId);
+
+        verify(bannedUserRepository, times(2)).saveAndFlush(any(BannedUser.class));
+        assertFalse(refreshed.getIsPermanent());
+        assertNotNull(refreshed.getExpiresAt());
         verify(moderationLogRepository, times(1)).save(any(ModerationLog.class));
     }
 
@@ -519,16 +621,12 @@ class ModerationServiceTest {
         String reason = "Permanent ban";
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(bannedUserRepository.save(any(BannedUser.class)))
-                .thenAnswer(invocation -> {
-                    BannedUser ban = invocation.getArgument(0);
-                    assertTrue(ban.getIsPermanent());
-                    return ban;
-                });
+        when(moderationPersister.insertBan(any(BannedUser.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(moderationLogRepository.save(any(ModerationLog.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         moderationService.banUser(streamId, userId, moderatorId, true, durationSeconds, reason);
-        verify(bannedUserRepository, times(1)).save(any(BannedUser.class));
+        verify(moderationPersister, times(1)).insertBan(any(BannedUser.class));
         verify(valueOperations, times(1)).set(eq("ban:1:2"), eq("1"));
     }
 

@@ -21,6 +21,7 @@ import com.streamchat.service.AuditService;
 import com.streamchat.service.AutoModService;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.ModerationService;
+import com.streamchat.service.StreamAuthorizationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -50,6 +51,7 @@ public class ModerationController {
 
     private final ModerationService moderationService;
     private final ChatService chatService;
+    private final StreamAuthorizationService streamAuthorizationService;
     private final SimpMessagingTemplate messagingTemplate;
     private final UserRepository userRepository;
     private final StreamRepository streamRepository;
@@ -91,6 +93,8 @@ public class ModerationController {
 
         User moderator = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("Moderator not found"));
+
+        streamAuthorizationService.assertCanActOn(streamKey, moderator, targetUser);
 
         moderationService.timeoutUser(stream.getId(), targetUser.getId(), moderator.getId(), duration, reason);
 
@@ -145,6 +149,8 @@ public class ModerationController {
 
         User moderator = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("Moderator not found"));
+
+        streamAuthorizationService.assertCanActOn(streamKey, moderator, targetUser);
 
         moderationService.banUser(stream.getId(), targetUser.getId(), moderator.getId(), permanent, duration, reason);
 
@@ -355,6 +361,8 @@ public class ModerationController {
 
         userStreamRoleRepository.save(role);
 
+        streamAuthorizationService.evictRoleCache(stream.getId(), user.getId());
+
         return ResponseEntity.ok(Map.of(
                 "status", "success",
                 "message", "Moderator added"
@@ -385,6 +393,8 @@ public class ModerationController {
 
         userStreamRoleRepository.deleteByUserIdAndStreamIdAndRole(
                 userId, stream.getId(), Role.ROLE_MODERATOR);
+
+        streamAuthorizationService.evictRoleCache(stream.getId(), userId);
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",

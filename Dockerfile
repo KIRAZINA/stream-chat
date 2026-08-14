@@ -8,10 +8,13 @@ WORKDIR /build
 COPY pom.xml .
 COPY src src
 
-# Build application
-RUN mvn -q -DskipTests clean package
+# Build application. -P !dev excludes the H2 driver from the runtime image.
+RUN mvn -q -DskipTests -P !dev clean package
 
 # Stage 2: Runtime
+# Amazon Corretto minimal image: install curl for healthcheck
+RUN microdnf install -y curl && microdnf clean all
+
 FROM amazoncorretto:21-minimal
 
 WORKDIR /app
@@ -22,9 +25,9 @@ COPY --from=builder /build/target/stream-chat-*.jar app.jar
 # Expose port
 EXPOSE 8080
 
-# Health check
+# Health check (uses curl now installed)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD java -cp app.jar org.springframework.boot.loader.JarLauncher -cp 'app.jar' -m 'com.streamchat.StreamChatApplication' &>/dev/null || exit 1
+    CMD curl -f http://localhost:8080/actuator/health || exit 1
 
 # Set default profile to prod
 ENV SPRING_PROFILES_ACTIVE=prod

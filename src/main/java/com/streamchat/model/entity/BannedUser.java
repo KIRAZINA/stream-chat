@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * Can be permanent or temporary ban.
  */
 @Entity
-@Table(name = "banned_users")
+@Table(name = "banned_users", uniqueConstraints = @UniqueConstraint(columnNames = {"stream_id", "user_id"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,6 +22,9 @@ public class BannedUser {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    private Long version;
 
     @Column(name = "stream_id", nullable = false)
     private Long streamId;

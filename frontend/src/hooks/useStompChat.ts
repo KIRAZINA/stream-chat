@@ -1,13 +1,23 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuthStore } from "../stores/auth-store";
+import { useChatStore } from "../stores/chat-store";
 import { StreamStompClient } from "../services/stomp-client";
 import { streamsApi } from "../api/streams";
 import { ChatMessageDTO } from "../types/backend";
+import { deduplicate } from "./useStompChat";
 
 const getStompClient = (): StreamStompClient => {
-  const wsUrl = import.meta.env.VITE_WS_URL;
+  let wsUrl = import.meta.env.VITE_WS_URL;
+  // Derive from window.location if not set, to allow development without .env
   if (!wsUrl) {
-    throw new Error("VITE_WS_URL environment variable is not defined");
+    const protocol = window.location.protocol.replace("http", "ws");
+    const host = window.location.host;
+    if (protocol && host) {
+      wsUrl = `${protocol}//${host}`;
+    }
+  }
+  if (!wsUrl) {
+    throw new Error("VITE_WS_URL environment variable is not defined and cannot be derived from window.location");
   }
   return new StreamStompClient(wsUrl);
 };
@@ -19,8 +29,10 @@ export function useStompChat(streamKey: string) {
   const [connectionState, setConnectionState] = useState<
     "disconnected" | "connecting" | "connected"
   >("disconnected");
-  const [lastSequenceId, setLastSequenceId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Ref to track the highest redisSequenceId seen (fallback if store access fails)
+  const lastSeenMessageIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!token || !streamKey) {
@@ -56,7 +68,16 @@ export function useStompChat(streamKey: string) {
           `/topic/stream/${streamKey}`,
           (msg) => {
             setMessages((prev) => mergeIncomingMessage(prev, msg));
-            if (msg.redisSequenceId) setLastSequenceId(msg.redisSequenceId);
+            // Track highest redisSequenceId in ref and update store
+            if (msg.redisSequenceId) {
+              const newId = msg.redisSequenceId;
+              lastSeenMessageIdRef.current = Math.max(
+                lastSeenMessageIdRef.current ?? 0,
+                newId
+              );
+              // Update store for other consumers
+              useChatStore.getState().setLastSeenMessageId(newId);
+            }
           },
         );
       } catch (err) {
@@ -84,19 +105,23 @@ export function useStompChat(streamKey: string) {
     };
   }, [token, streamKey]);
 
-  // Replay on reconnect
+  // Replay on reconnect / new stream join
   useEffect(() => {
-    if (connectionState === "connected" && lastSequenceId !== null) {
-      streamsApi
-        .getReplayWindow(streamKey, lastSequenceId + 1, 100)
-        .then((res) => {
-          const missed = res.messages;
-          if (missed.length)
-            setMessages((prev) => [...prev, ...deduplicate(prev, missed)]);
-        })
-        .catch(console.error);
+    if (connectionState === "connected") {
+      // Use store value first, fallback to ref
+      const lastSeen = useChatStore.getState().lastSeenMessageId ?? lastSeenMessageIdRef.current;
+      if (lastSeen !== null) {
+        streamsApi
+          .getReplayWindow(streamKey, lastSeen + 1, 100)
+          .then((res) => {
+            const missed = res.messages;
+            if (missed.length)
+              setMessages((prev) => [...prev, ...deduplicate(prev, missed)]);
+          })
+          .catch(console.error);
+      }
     }
-  }, [connectionState, streamKey, lastSequenceId]);
+  }, [connectionState, streamKey]);
 
   const sendMessage = useCallback(
     (content: string, replyTo?: number) => {

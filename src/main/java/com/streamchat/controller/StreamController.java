@@ -6,6 +6,7 @@ import com.streamchat.model.dto.StreamPresenceResponse;
 import com.streamchat.model.dto.StreamRequest;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.PresenceService;
+import com.streamchat.service.StreamAuthorizationService;
 import com.streamchat.service.StreamService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -35,6 +36,7 @@ public class StreamController {
     private final StreamService streamService;
     private final ChatService chatService;
     private final PresenceService presenceService;
+    private final StreamAuthorizationService streamAuthorizationService;
 
     /**
      * Get all live streams.
@@ -77,9 +79,12 @@ public class StreamController {
             @PathVariable String streamKey,
             @RequestParam(required = false) Long before,
             @RequestParam(defaultValue = "50") Integer limit,
-            @RequestParam(defaultValue = "false") boolean includeDeleted) {
+            @RequestParam(defaultValue = "false") boolean includeDeleted,
+            Authentication authentication) {
 
         log.debug("Fetching chat history: stream={}, before={}, limit={}, includeDeleted={}", streamKey, before, limit, includeDeleted);
+        streamAuthorizationService.assertCanAccessHistory(streamKey,
+                authentication != null ? authentication.getName() : null);
         ChatHistoryResponse history = chatService.getMessageHistory(streamKey, before, limit, includeDeleted);
         return ResponseEntity.ok(history);
     }
@@ -98,9 +103,13 @@ public class StreamController {
     public ResponseEntity<ChatHistoryResponse> getReplayWindow(
             @PathVariable String streamKey,
             @RequestParam(required = false) Long afterSequenceId,
-            @RequestParam(defaultValue = "100") Integer limit) {
+            @RequestParam(defaultValue = "100") Integer limit,
+            Authentication authentication) {
 
         log.debug("Fetching replay window: stream={}, afterSequenceId={}, limit={}", streamKey, afterSequenceId, limit);
+
+        streamAuthorizationService.assertCanAccessHistory(streamKey,
+                authentication != null ? authentication.getName() : null);
 
         // For now, use the standard history endpoint as replay
         // In production, this would use redis_sequence_id for precise replay

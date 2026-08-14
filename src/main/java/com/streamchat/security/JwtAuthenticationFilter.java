@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -27,8 +29,13 @@ import java.io.IOException;
 @Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final String REVOKED_JWT_KEY = "revoked:jwt:";
+
     private final JwtTokenProvider tokenProvider;
     private final UserDetailsService userDetailsService;
+
+    @Autowired(required = false)
+    private RedisTemplate<String, Object> redisTemplate;
 
     /**
      * Filter incoming requests to extract and validate JWT tokens.
@@ -41,7 +48,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = getJwtFromRequest(request);
 
-            if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
+            if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)
+                    && !isRevoked(jwt)) {
                 String username = tokenProvider.getUsernameFromToken(jwt);
 
                 try {
@@ -67,6 +75,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Check the revocation set. This check fails OPEN when Redis is
+     * unavailable: access tokens are short-lived (minutes), so a
+     * stale un-revoked token self-expires quickly. This is the
+     * opposite of ban/timeout checks, which must fail closed.
+     */
+    private boolean isRevoked(String token) {
+        if (redisTemplate == null) {
+            return false;
+        }
+        try {
+            String jti = tokenProvider.getTokenId(token);
+            return Boolean.TRUE.equals(redisTemplate.hasKey(REVOKED_JWT_KEY + jti));
+        } catch (Exception e) {
+            log.debug("Redis unavailable for JWT revocation check; failing open: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**

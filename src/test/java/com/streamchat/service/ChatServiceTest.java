@@ -9,18 +9,25 @@ import com.streamchat.service.EmoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.core.ListOperations;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -72,6 +79,9 @@ class ChatServiceTest {
 
     @Mock
     private AutoModService autoModService;
+
+    @Mock
+    private ChatMessagePersister chatMessagePersister;
 
     @InjectMocks
     private ChatService chatService;
@@ -164,7 +174,7 @@ class ChatServiceTest {
                 .messageType(MessageType.CHAT)
                 .build();
 
-        when(chatMessageRepository.save(any(ChatMessage.class)))
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
                 .thenReturn(savedMessage);
         ChatMessageDTO result = chatService.sendMessage(
                 streamKey, username, content, MessageType.CHAT);
@@ -174,7 +184,7 @@ class ChatServiceTest {
         assertEquals(content, result.getContent());
         assertEquals(MessageType.CHAT, result.getMessageType());
 
-        verify(chatMessageRepository).save(any(ChatMessage.class));
+        verify(chatMessagePersister).persist(any(ChatMessage.class));
         verify(listOperations).leftPush(anyString(), any(ChatMessageDTO.class));
         verify(listOperations).trim(anyString(), eq(0L), eq(99L));
         verify(redisTemplate).expire(anyString(), eq(1L), eq(TimeUnit.HOURS));
@@ -196,7 +206,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("banned"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -217,7 +227,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("timed out"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -239,7 +249,7 @@ class ChatServiceTest {
         assertThrows(RuntimeException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -262,7 +272,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("maximum length"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -285,7 +295,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("cannot be empty"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -310,7 +320,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("Links are not allowed"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -337,7 +347,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("blocked words"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -401,7 +411,7 @@ class ChatServiceTest {
         assertThrows(RuntimeException.class, () ->
                 chatService.deleteMessage(messageId, deletedByUsername));
 
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -432,13 +442,13 @@ class ChatServiceTest {
                 .messageType(MessageType.CHAT)
                 .build();
 
-        when(chatMessageRepository.save(any(ChatMessage.class)))
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
                 .thenReturn(savedMessage);
         ChatMessageDTO result = chatService.sendMessage(
                 streamKey, username, content, MessageType.CHAT);
         assertNotNull(result);
         assertEquals(content, result.getContent());
-        verify(chatMessageRepository).save(any(ChatMessage.class));
+        verify(chatMessagePersister).persist(any(ChatMessage.class));
     }
 
     @Test
@@ -471,12 +481,12 @@ class ChatServiceTest {
                 .messageType(MessageType.CHAT)
                 .build();
 
-        when(chatMessageRepository.save(any(ChatMessage.class)))
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
                 .thenReturn(savedMessage);
         ChatMessageDTO result = chatService.sendMessage(
                 streamKey, username, content, MessageType.CHAT);
         assertNotNull(result);
-        verify(chatMessageRepository).save(any(ChatMessage.class));
+        verify(chatMessagePersister).persist(any(ChatMessage.class));
     }
 
     @Test
@@ -490,7 +500,7 @@ class ChatServiceTest {
         assertThrows(RuntimeException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -506,7 +516,7 @@ class ChatServiceTest {
         assertThrows(RuntimeException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -531,7 +541,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("cannot be empty"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -586,7 +596,7 @@ class ChatServiceTest {
                 .messageType(MessageType.SYSTEM)
                 .build();
 
-        when(chatMessageRepository.save(any(ChatMessage.class)))
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
                 .thenReturn(savedMessage);
         ChatMessageDTO result = chatService.sendMessage(
                 streamKey, username, content, MessageType.SYSTEM);
@@ -597,6 +607,7 @@ class ChatServiceTest {
     @Test
     void sendMessage_SlowModeEnabled_SecondMessageTooSoon_ThrowsException() {
         ReflectionTestUtils.setField(chatService, "redisTemplate", null);
+        ReflectionTestUtils.setField(chatService, "slowModeStorage", "memory");
 
         String streamKey = "test-stream";
         String username = "testuser";
@@ -615,7 +626,7 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(rateLimitService.allowMessage(anyLong(), anyLong()))
                 .thenReturn(true);
-        when(chatMessageRepository.save(any(ChatMessage.class)))
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
                 .thenAnswer(invocation -> {
                     ChatMessage message = invocation.getArgument(0);
                     message.setId(1L);
@@ -628,6 +639,317 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("Slow mode"));
+        verify(metricsService, never()).recordSlowModeRedisFallback();
+    }
+
+    @Test
+    void sendMessage_SlowModeRedis_AtomicScriptBlocked_ThrowsException() {
+        ReflectionTestUtils.setField(chatService, "slowModeStorage", "redis");
+
+        String streamKey = "test-stream";
+        String username = "testuser";
+        String content = "Hello in slow mode";
+
+        testSettings.setSlowModeEnabled(true);
+        testSettings.setSlowModeSeconds(10);
+
+        when(redisTemplate.execute(any(RedisCallback.class)))
+                .thenReturn(5000L);
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+
+        RateLimitException exception = assertThrows(RateLimitException.class, () ->
+                chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
+
+        assertTrue(exception.getMessage().contains("Slow mode"));
+        verify(chatMessagePersister, never()).persist(any());
+        verify(metricsService, never()).recordSlowModeRedisFallback();
+    }
+
+    @Test
+    void sendMessage_SlowModeRedis_Allowed_SendsAtomicScriptWithKeyAndTtl() {
+        ReflectionTestUtils.setField(chatService, "slowModeStorage", "redis");
+
+        String streamKey = "test-stream";
+        String username = "testuser";
+
+        testSettings.setSlowModeEnabled(true);
+        testSettings.setSlowModeSeconds(10);
+
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(redisTemplate.execute(any(RedisCallback.class)))
+                .thenReturn(0L);
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenAnswer(invocation -> {
+                    ChatMessage message = invocation.getArgument(0);
+                    message.setId(1L);
+                    return message;
+                });
+
+        ChatMessageDTO result = chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT);
+
+        assertNotNull(result);
+
+        ArgumentCaptor<RedisCallback> callbackCaptor = ArgumentCaptor.forClass(RedisCallback.class);
+        verify(redisTemplate).execute(callbackCaptor.capture());
+
+        RedisConnection connection = mock(RedisConnection.class);
+        when(connection.eval(any(byte[].class), eq(ReturnType.INTEGER), eq(1), any(byte[][].class)))
+                .thenReturn(0L);
+
+        Object returned = callbackCaptor.getValue().doInRedis(connection);
+        assertEquals(0L, returned);
+
+        ArgumentCaptor<byte[]> scriptCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<byte[][]> keysAndArgsCaptor = ArgumentCaptor.forClass(byte[][].class);
+        verify(connection).eval(scriptCaptor.capture(), eq(ReturnType.INTEGER), eq(1), keysAndArgsCaptor.capture());
+        assertArrayEquals(ChatService.SLOW_MODE_LUA.getBytes(StandardCharsets.UTF_8), scriptCaptor.getValue());
+        byte[][] keysAndArgs = keysAndArgsCaptor.getValue();
+        assertEquals("slowmode:lastmessage:1:1", new String(keysAndArgs[0], StandardCharsets.UTF_8));
+        assertEquals("10000", new String(keysAndArgs[2], StandardCharsets.UTF_8));
+        assertEquals("15", new String(keysAndArgs[3], StandardCharsets.UTF_8));
+        verify(metricsService, never()).recordSlowModeRedisFallback();
+    }
+
+    @Test
+    void sendMessage_SlowModeRedisDown_AllowsMessage() {
+        ReflectionTestUtils.setField(chatService, "slowModeStorage", "redis");
+
+        String streamKey = "test-stream";
+        String username = "testuser";
+        String content = "Hello in slow mode";
+
+        testSettings.setSlowModeEnabled(true);
+        testSettings.setSlowModeSeconds(10);
+
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(redisTemplate.execute(any(RedisCallback.class)))
+                .thenThrow(new RuntimeException("Redis connection failed"));
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenAnswer(invocation -> {
+                    ChatMessage message = invocation.getArgument(0);
+                    message.setId(1L);
+                    return message;
+                });
+
+        ChatMessageDTO result = chatService.sendMessage(streamKey, username, content, MessageType.CHAT);
+
+        assertNotNull(result);
+        verify(metricsService).recordSlowModeRedisFallback();
+        verify(chatMessagePersister).persist(any(ChatMessage.class));
+    }
+
+    @Test
+    void sendMessage_DuplicateIdempotencyKey_ReturnsExistingWithoutReconsumingQuota() {
+        String streamKey = "test-stream";
+        String username = "testuser";
+
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenAnswer(invocation -> {
+                    ChatMessage message = invocation.getArgument(0);
+                    message.setId(1L);
+                    return message;
+                });
+
+        ChatMessageDTO first = chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT, null, "key-1");
+        assertNotNull(first);
+        assertEquals(1L, first.getId());
+
+        ChatMessage existing = ChatMessage.builder()
+                .id(1L)
+                .stream(testStream)
+                .user(testUser)
+                .username(username)
+                .content("Hello")
+                .messageType(MessageType.CHAT)
+                .idempotencyKey("key-1")
+                .build();
+        when(chatMessageRepository.findByIdempotencyKey("key-1"))
+                .thenReturn(Optional.of(existing));
+
+        ChatMessageDTO second = chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT, null, "key-1");
+
+        assertEquals(1L, second.getId());
+        verify(chatMessagePersister, times(1)).persist(any(ChatMessage.class));
+        verify(rateLimitService, times(1)).allowMessage(anyLong(), anyLong());
+        verify(autoModService, times(1)).analyzeMessage(any(), any(), any());
+    }
+
+    @Test
+    void sendMessage_RaceDuplicateIdempotencyKey_RecoversFromViolation() {
+        String streamKey = "test-stream";
+        String username = "testuser";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
+
+        ChatMessage existing = ChatMessage.builder()
+                .id(1L)
+                .stream(testStream)
+                .user(testUser)
+                .username(username)
+                .content("Hello")
+                .messageType(MessageType.CHAT)
+                .idempotencyKey("key-race")
+                .build();
+        when(chatMessageRepository.findByIdempotencyKey("key-race"))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+
+        ChatMessageDTO result = chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT, null, "key-race");
+
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
+    }
+
+    @Test
+    void sendMessage_DuplicateKey_OtherStream_Rethrows() {
+        String streamKey = "test-stream";
+        String username = "testuser";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
+
+        Stream otherStream = Stream.builder()
+                .id(2L)
+                .streamKey("other-stream")
+                .user(streamOwner)
+                .isLive(true)
+                .build();
+        ChatMessage existing = ChatMessage.builder()
+                .id(1L)
+                .stream(otherStream)
+                .user(testUser)
+                .username(username)
+                .content("Hello")
+                .messageType(MessageType.CHAT)
+                .idempotencyKey("key-x")
+                .build();
+        when(chatMessageRepository.findByIdempotencyKey("key-x"))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+
+        assertThrows(DataIntegrityViolationException.class, () ->
+                chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT, null, "key-x"));
+    }
+
+    @Test
+    void sendMessage_DuplicateIdempotencyKey_OtherStream_FastPathThrows() {
+        String streamKey = "test-stream";
+        String username = "testuser";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+
+        Stream otherStream = Stream.builder()
+                .id(2L)
+                .streamKey("other-stream")
+                .user(streamOwner)
+                .isLive(true)
+                .build();
+        ChatMessage existing = ChatMessage.builder()
+                .id(1L)
+                .stream(otherStream)
+                .user(testUser)
+                .username(username)
+                .content("Hello")
+                .messageType(MessageType.CHAT)
+                .idempotencyKey("key-fast-x")
+                .build();
+        when(chatMessageRepository.findByIdempotencyKey("key-fast-x"))
+                .thenReturn(Optional.of(existing));
+
+        assertThrows(DataIntegrityViolationException.class, () ->
+                chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT, null, "key-fast-x"));
+        verify(rateLimitService, never()).allowMessage(anyLong(), anyLong());
+        verify(autoModService, never()).analyzeMessage(any(), any(), any());
+    }
+
+    @Test
+    void sendMessage_NullIdempotencyKey_TwoSendsBothSucceed() {
+        String streamKey = "test-stream";
+        String username = "testuser";
+
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenAnswer(invocation -> {
+                    ChatMessage message = invocation.getArgument(0);
+                    message.setId(1L);
+                    return message;
+                });
+
+        chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT);
+        chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT);
+
+        verify(chatMessagePersister, times(2)).persist(any(ChatMessage.class));
     }
 
     @Test
@@ -650,7 +972,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("subscribers-only"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -673,7 +995,7 @@ class ChatServiceTest {
                 .thenReturn(true);
         when(userBadgeRepository.hasBadge(anyLong(), anyLong(), eq(com.streamchat.model.enums.UserBadge.SUBSCRIBER.name())))
                 .thenReturn(true);
-        when(chatMessageRepository.save(any(ChatMessage.class)))
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
                 .thenAnswer(invocation -> {
                     ChatMessage message = invocation.getArgument(0);
                     message.setId(1L);
@@ -683,7 +1005,7 @@ class ChatServiceTest {
         ChatMessageDTO result = chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT);
 
         assertNotNull(result);
-        verify(chatMessageRepository).save(any(ChatMessage.class));
+        verify(chatMessagePersister).persist(any(ChatMessage.class));
     }
 
     @Test
@@ -707,7 +1029,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("followers-only"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -735,7 +1057,7 @@ class ChatServiceTest {
                 eq(com.streamchat.model.enums.UserBadge.FOLLOWER.name()),
                 any(LocalDateTime.class)))
                 .thenReturn(true);
-        when(chatMessageRepository.save(any(ChatMessage.class)))
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
                 .thenAnswer(invocation -> {
                     ChatMessage message = invocation.getArgument(0);
                     message.setId(1L);
@@ -745,7 +1067,7 @@ class ChatServiceTest {
         ChatMessageDTO result = chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT);
 
         assertNotNull(result);
-        verify(chatMessageRepository).save(any(ChatMessage.class));
+        verify(chatMessagePersister).persist(any(ChatMessage.class));
     }
 
     @Test
@@ -770,7 +1092,7 @@ class ChatServiceTest {
                 chatService.sendMessage(streamKey, username, "plain text", MessageType.CHAT));
 
         assertTrue(exception.getMessage().contains("emote-only"));
-        verify(chatMessageRepository, never()).save(any());
+        verify(chatMessagePersister, never()).persist(any());
     }
 
     @Test
@@ -795,7 +1117,7 @@ class ChatServiceTest {
                 .thenReturn(true);
         when(emoteRepository.existsByStreamIdAndCode(testStream.getId(), "wave"))
                 .thenReturn(true);
-        when(chatMessageRepository.save(any(ChatMessage.class)))
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
                 .thenAnswer(invocation -> {
                     ChatMessage message = invocation.getArgument(0);
                     message.setId(1L);
@@ -805,7 +1127,7 @@ class ChatServiceTest {
         ChatMessageDTO result = chatService.sendMessage(streamKey, username, ":smile: :wave:", MessageType.CHAT);
 
         assertNotNull(result);
-        verify(chatMessageRepository).save(any(ChatMessage.class));
+        verify(chatMessagePersister).persist(any(ChatMessage.class));
     }
 
     @Test
@@ -1029,8 +1351,8 @@ class ChatServiceTest {
                 .thenReturn(Optional.of(testStream));
         when(chatMessageRepository.findByStreamIdAndIsDeletedFalseOrderByIdDesc(eq(testStream.getId()), any()))
                 .thenReturn(List.of(reply));
-        when(chatMessageRepository.findById(120L))
-                .thenReturn(Optional.of(parent));
+        when(chatMessageRepository.findAllById(any()))
+                .thenReturn(List.of(parent));
 
         var result = chatService.getMessageHistory(streamKey, null, 20);
 
@@ -1039,6 +1361,164 @@ class ChatServiceTest {
         assertEquals(120L, result.getMessages().get(0).getReplyToMessageId());
         assertEquals("parentUser", result.getMessages().get(0).getReplyToUsername());
         assertTrue(result.getMessages().get(0).getReplyToContentPreview().contains("Hello from parent"));
+        verify(chatMessageRepository).findAllById(any());
+        verify(chatMessageRepository, never()).findById(120L);
+    }
+
+    @Test
+    void getMessageHistory_NoReplies_IssuesNoBatchQuery() {
+        String streamKey = "test-stream";
+
+        ChatMessage noReply = ChatMessage.builder()
+                .id(121L)
+                .stream(testStream)
+                .user(testUser)
+                .username("replyUser")
+                .content("Plain message")
+                .messageType(MessageType.CHAT)
+                .build();
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(chatMessageRepository.findByStreamIdAndIsDeletedFalseOrderByIdDesc(eq(testStream.getId()), any()))
+                .thenReturn(List.of(noReply));
+
+        var result = chatService.getMessageHistory(streamKey, null, 20);
+
+        assertNotNull(result);
+        assertEquals(1, result.getMessages().size());
+        verify(chatMessageRepository, never()).findAllById(any());
+    }
+
+    @Test
+    void getMessageHistory_ReplyToDeletedTarget_ShowsMessageDeleted() {
+        String streamKey = "test-stream";
+
+        ChatMessage deletedParent = ChatMessage.builder()
+                .id(120L)
+                .stream(testStream)
+                .user(testUser)
+                .username("parentUser")
+                .content("Removed content")
+                .isDeleted(true)
+                .messageType(MessageType.DELETED)
+                .build();
+
+        ChatMessage reply = ChatMessage.builder()
+                .id(121L)
+                .stream(testStream)
+                .user(testUser)
+                .username("replyUser")
+                .content("Reply text")
+                .replyToMessageId(120L)
+                .messageType(MessageType.CHAT)
+                .build();
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(chatMessageRepository.findByStreamIdAndIsDeletedFalseOrderByIdDesc(eq(testStream.getId()), any()))
+                .thenReturn(List.of(reply));
+        when(chatMessageRepository.findAllById(any()))
+                .thenReturn(List.of(deletedParent));
+
+        var result = chatService.getMessageHistory(streamKey, null, 20);
+
+        assertEquals(1, result.getMessages().size());
+        assertEquals("parentUser", result.getMessages().get(0).getReplyToUsername());
+        assertEquals("Message deleted", result.getMessages().get(0).getReplyToContentPreview());
+    }
+
+    @Test
+    void getMessageHistory_OrphanedReplyToId_NoPreviewNoException() {
+        String streamKey = "test-stream";
+
+        ChatMessage reply = ChatMessage.builder()
+                .id(121L)
+                .stream(testStream)
+                .user(testUser)
+                .username("replyUser")
+                .content("Reply text")
+                .replyToMessageId(999L)
+                .messageType(MessageType.CHAT)
+                .build();
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(chatMessageRepository.findByStreamIdAndIsDeletedFalseOrderByIdDesc(eq(testStream.getId()), any()))
+                .thenReturn(List.of(reply));
+        when(chatMessageRepository.findAllById(any()))
+                .thenReturn(List.of());
+
+        var result = chatService.getMessageHistory(streamKey, null, 20);
+
+        assertEquals(1, result.getMessages().size());
+        assertEquals(999L, result.getMessages().get(0).getReplyToMessageId());
+        assertNull(result.getMessages().get(0).getReplyToUsername());
+        assertNull(result.getMessages().get(0).getReplyToContentPreview());
+        verify(chatMessageRepository).findAllById(argThat(ids -> {
+            for (Long id : ids) {
+                if (Long.valueOf(999L).equals(id)) {
+                    return true;
+                }
+            }
+            return false;
+        }));
+    }
+
+    @Test
+    void sendMessage_AndHistory_ProduceIdenticalReplyPreview() {
+        ReflectionTestUtils.setField(chatService, "redisTemplate", null);
+        String streamKey = "test-stream";
+        String username = "testuser";
+
+        ChatMessage parent = ChatMessage.builder()
+                .id(120L)
+                .stream(testStream)
+                .user(testUser)
+                .username("parentUser")
+                .content("Hello from parent message")
+                .messageType(MessageType.CHAT)
+                .build();
+
+        ChatMessage reply = ChatMessage.builder()
+                .id(121L)
+                .stream(testStream)
+                .user(testUser)
+                .username("replyUser")
+                .content("Reply text")
+                .replyToMessageId(120L)
+                .messageType(MessageType.CHAT)
+                .build();
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenReturn(reply);
+        when(chatMessageRepository.findById(120L))
+                .thenReturn(Optional.of(parent));
+
+        ChatMessageDTO single = chatService.sendMessage(
+                streamKey, username, "Reply text", MessageType.CHAT, 120L);
+
+        when(chatMessageRepository.findByStreamIdAndIsDeletedFalseOrderByIdDesc(eq(testStream.getId()), any()))
+                .thenReturn(List.of(reply));
+        when(chatMessageRepository.findAllById(any()))
+                .thenReturn(List.of(parent));
+
+        ChatMessageDTO batch = chatService.getMessageHistory(streamKey, null, 20)
+                .getMessages().get(0);
+
+        assertThat(single).usingRecursiveComparison().isEqualTo(batch);
+        assertEquals("parentUser", single.getReplyToUsername());
+        assertEquals("Hello from parent message", single.getReplyToContentPreview());
     }
 
     @Test

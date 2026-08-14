@@ -11,6 +11,7 @@ interface ChatState {
   } | null;
   ui: ChatUIState;
   contextMenu: ContextMenuState;
+  lastSeenMessageId: number | null;
   addMessage: (message: ChatMessageDTO) => void;
   updateMessage: (messageId: number, updates: Partial<ChatMessageDTO>) => void;
   clearMessages: () => void;
@@ -18,6 +19,7 @@ interface ChatState {
   setUI: (ui: Partial<ChatUIState>) => void;
   setContextMenu: (menu: ContextMenuState) => void;
   closeContextMenu: () => void;
+  setLastSeenMessageId: (id: number | null) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -36,15 +38,17 @@ export const useChatStore = create<ChatState>((set) => ({
     x: 0,
     y: 0
   },
+  lastSeenMessageId: null,
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   updateMessage: (messageId, updates) =>
     set((state) => ({
       messages: state.messages.map((m) => (m.id === messageId ? { ...m, ...updates } : m))
     })),
-  clearMessages: () => set({ messages: [], selectedReply: null }),
+  clearMessages: () => set({ messages: [], selectedReply: null, lastSeenMessageId: null }),
   setReply: (reply) => set({ selectedReply: reply }),
   setUI: (ui) => set((state) => ({ ui: { ...state.ui, ...ui } })),
   setContextMenu: (menu) => set({ contextMenu: menu }),
-  closeContextMenu: () =>
-    set((state) => ({ contextMenu: { ...state.contextMenu, isOpen: false } }))
+  closeContextMenu: =>
+    set((state) => ({ contextMenu: { ...state.contextMenu, isOpen: false } })),
+  setLastSeenMessageId: (id) => set({ lastSeenMessageId: id })
 }));

@@ -1,7 +1,11 @@
 package com.streamchat.config;
 
 import com.streamchat.security.JwtTokenProvider;
+import com.streamchat.service.StreamAuthorizationService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -13,15 +17,25 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.util.StringUtils;
 import org.springframework.web.socket.config.annotation.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * WebSocket configuration for real-time chat communication.
  * Uses STOMP protocol over SockJS for broad browser compatibility.
+ *
+ * 2.1 hardening (additive): explicit property-driven allowed origins (never
+ * "*"), transport incoming-size / send-time / send-buffer / time-to-first-
+ * message limits, and broker heartbeats driven by a dedicated TaskScheduler.
+ * The JWT auth interceptor (CONNECT/SEND/SUBSCRIBE) and the /topic/stream/*
+ * subscription enforcement are unchanged.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -31,6 +45,67 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtTokenProvider tokenProvider;
     private final UserDetailsService userDetailsService;
+    private final StreamAuthorizationService streamAuthorizationService;
+
+    @Value("${app.websocket.allowed-origins}")
+    private String allowedOrigins;
+
+    @Value("${app.websocket.incoming-message-size-limit}")
+    private int incomingMessageSizeLimit;
+
+    @Value("${app.websocket.send-time-limit-ms}")
+    private int sendTimeLimitMs;
+
+    @Value("${app.websocket.send-buffer-size-limit}")
+    private int sendBufferSizeLimit;
+
+    @Value("${app.websocket.time-to-first-message-ms}")
+    private int timeToFirstMessageMs;
+
+    @Value("${app.websocket.heartbeat-interval-ms}")
+    private long heartbeatIntervalMs;
+
+    @Value("${app.websocket.scheduler-pool-size}")
+    private int schedulerPoolSize;
+
+    /**
+     * Fail fast when the allowed-origins property is missing, empty, or
+     * wildcarded. WebSocket origins must always be an explicit list; a
+     * misconfigured deployment must refuse to start rather than widen.
+     */
+    @PostConstruct
+    void validateAllowedOrigins() {
+        parseOrigins();
+    }
+
+    /**
+     * Parse the comma-separated origin list, rejecting any "*". Empty or
+     * blank input yields an empty list so the caller can fail fast.
+     */
+    List<String> parseOrigins() {
+        if (allowedOrigins == null || allowedOrigins.isBlank()) {
+            throw new IllegalStateException(
+                    "app.websocket.allowed-origins must be set to an explicit, comma-separated list of origins "
+                            + "(never '*'); got: '" + allowedOrigins + "'");
+        }
+        List<String> origins = new ArrayList<>();
+        for (String origin : allowedOrigins.split(",")) {
+            String trimmed = origin.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if ("*".equals(trimmed)) {
+                throw new IllegalStateException(
+                        "app.websocket.allowed-origins must be an explicit list of origins, '*' is not allowed");
+            }
+            origins.add(trimmed);
+        }
+        if (origins.isEmpty()) {
+            throw new IllegalStateException(
+                    "app.websocket.allowed-origins must contain at least one origin; got: '" + allowedOrigins + "'");
+        }
+        return origins;
+    }
 
     /**
      * Configure message broker for pub/sub messaging.
@@ -40,7 +115,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
         // Enable simple in-memory broker for destinations prefixed with /topic and /queue
-        config.enableSimpleBroker("/topic", "/queue");
+        config.enableSimpleBroker("/topic", "/queue")
+                // Heartbeats require a TaskScheduler; without one no heartbeat
+                // frames are emitted and dead connections are never reaped.
+                .setHeartbeatValue(new long[]{heartbeatIntervalMs, heartbeatIntervalMs})
+                .setTaskScheduler(heartbeatScheduler());
 
         // Set application destination prefix for @MessageMapping
         config.setApplicationDestinationPrefixes("/app");
@@ -56,8 +135,22 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws-chat")
-                .setAllowedOriginPatterns("*")
+                .setAllowedOriginPatterns(parseOrigins().toArray(new String[0]))
                 .withSockJS();
+    }
+
+    /**
+     * Incoming/outgoing transport limits: cap the largest accepted frame,
+     * bound how long a send may block flushing to a slow session, bound how
+     * much may be buffered per session, and require the first client frame
+     * within a time window. Does not touch the JWT interceptor.
+     */
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.setMessageSizeLimit(incomingMessageSizeLimit)
+                .setSendTimeLimit(sendTimeLimitMs)
+                .setSendBufferSizeLimit(sendBufferSizeLimit)
+                .setTimeToFirstMessage(timeToFirstMessageMs);
     }
 
     /**
@@ -91,7 +184,25 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     }
                 }
 
+                if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+                    enforceSubscriptionAccess(accessor);
+                }
+
                 return message;
+            }
+
+            private void enforceSubscriptionAccess(StompHeaderAccessor accessor) {
+                String destination = accessor.getDestination();
+                if (destination == null || !destination.startsWith("/topic/stream/")) {
+                    return;
+                }
+                String streamKey = destination.substring("/topic/stream/".length());
+                int slash = streamKey.indexOf('/');
+                if (slash >= 0) {
+                    streamKey = streamKey.substring(0, slash);
+                }
+                String username = accessor.getUser() != null ? accessor.getUser().getName() : null;
+                streamAuthorizationService.assertCanAccessHistory(streamKey, username);
             }
 
             private void authenticate(StompHeaderAccessor accessor) {
@@ -115,5 +226,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 accessor.setUser(authentication);
             }
         });
+    }
+
+    /**
+     * TaskScheduler that drives broker heartbeat emission and dead-session
+     * reaping. Pool size is deliberately small (heartbeat ticks only).
+     */
+    @Bean
+    public ThreadPoolTaskScheduler heartbeatScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(schedulerPoolSize);
+        scheduler.setThreadNamePrefix("ws-heartbeat-");
+        return scheduler;
     }
 }

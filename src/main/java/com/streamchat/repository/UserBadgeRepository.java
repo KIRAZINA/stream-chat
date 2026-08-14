@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Repository for user badge operations.
@@ -35,10 +36,11 @@ public interface UserBadgeRepository extends JpaRepository<UserBadge, Long> {
                                   @Param("badgeType") String badgeType,
                                   @Param("grantedBefore") LocalDateTime grantedBefore);
 
-    @Query("SELECT DISTINCT b.badgeType " +
+@Query("SELECT DISTINCT b.badgeType " +
             "FROM UserBadge b " +
-            "WHERE b.user.id = :userId " +
-            "AND (b.stream.id = :streamId OR b.stream IS NULL)")
-    List<String> findBadgeTypesByUserIdAndStreamIdOrGlobal(@Param("userId") Long userId,
-                                                           @Param("streamId") Long streamId);
+            "WHERE b.user.id IN :userIds " +
+            "AND (b.stream.id IN :streamIds OR b.stream IS NULL)")
+List<String> findBadgeTypesByUserIdAndStreamIdOrGlobalIn(
+        @Param("userIds") Set<Long> userIds,
+        @Param("streamIds") Set<Long> streamIds);
 }

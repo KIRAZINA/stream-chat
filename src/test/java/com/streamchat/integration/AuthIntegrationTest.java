@@ -14,7 +14,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Map;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,7 +37,7 @@ class AuthIntegrationTest {
         userRepository.deleteAll();
     }
 
-    @Test
+@Test
     void register_login_refresh_success() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .with(csrf())
@@ -52,7 +51,7 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Registration successful. Please login."))
                 .andExpect(jsonPath("$.username").value("alice"));
 
-        mockMvc.perform(post("/api/auth/login")
+        String loginResponse = mockMvc.perform(post("/api/auth/login")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
@@ -61,13 +60,24 @@ class AuthIntegrationTest {
                         ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").exists())
-                .andExpect(jsonPath("$.username").value("alice"));
+                .andExpect(jsonPath("$.refresh_token").exists())
+                .andExpect(jsonPath("$.username").value("alice"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        var json = objectMapper.readTree(loginResponse);
+        String refresh = json.get("refresh_token").asText();
 
         mockMvc.perform(post("/api/auth/refresh")
-                        .with(user("alice"))
-                        .with(csrf()))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "refreshToken", refresh
+                        ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.refresh_token").exists())
                 .andExpect(jsonPath("$.username").value("alice"));
     }
 }

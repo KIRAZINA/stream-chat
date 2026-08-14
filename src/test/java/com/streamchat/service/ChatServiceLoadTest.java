@@ -60,6 +60,8 @@ class ChatServiceLoadTest {
     private MetricsService metricsService;
     @Mock
     private AutoModService autoModService;
+    @Mock
+    private ChatMessagePersister chatMessagePersister;
 
     private ChatService chatService;
 
@@ -69,7 +71,7 @@ class ChatServiceLoadTest {
                 chatMessageRepository, streamRepository, userRepository,
                 rateLimitService, moderationService, streamAuthorizationService,
                 userStreamRoleRepository, userBadgeRepository, emoteRepository,
-                emoteService, metricsService, autoModService);
+                emoteService, metricsService, autoModService, chatMessagePersister);
     }
 
     @Test
@@ -99,7 +101,7 @@ class ChatServiceLoadTest {
             return count <= 5; // Allow first 5, then block
         });
 
-        when(chatMessageRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatMessagePersister.persist(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         int threadCount = 10;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
@@ -154,7 +156,7 @@ class ChatServiceLoadTest {
         lenient().doNothing().when(metricsService).recordMessageProcessing(anyLong());
         lenient().doNothing().when(metricsService).recordMessageSent(anyString(), anyString());
         when(rateLimitService.allowMessage(anyLong(), anyLong(), anyInt(), anyInt())).thenReturn(true);
-        when(chatMessageRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatMessagePersister.persist(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         int messageCount = 100;
         long startTime = System.currentTimeMillis();

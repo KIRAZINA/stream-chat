@@ -65,6 +65,12 @@
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
 
+        <!-- Caffeine: in-memory slow-mode storage for the dev escape hatch -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Micrometer for metrics -->
         <dependency>
             <groupId>io.micrometer</groupId>
@@ -85,11 +91,12 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- H2 Database -->
+        <!-- H2 Database (runtime only under the "dev" profile; test scope here
+             so mvn clean test always has a driver regardless of active profiles) -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>runtime</scope>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
@@ -223,8 +230,27 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-        </dependencies>
+    </dependencies>
     </dependencyManagement>
+
+    <profiles>
+        <!-- Local development: H2 available at runtime for the "dev" profile.
+             The production build deactivates this profile (-P !dev) so the
+             H2 driver never ships in the runtime image. -->
+        <profile>
+            <id>dev</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.h2database</groupId>
+                    <artifactId>h2</artifactId>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 
     <build>
         <plugins>

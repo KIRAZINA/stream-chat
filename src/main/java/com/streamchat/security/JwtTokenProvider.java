@@ -8,10 +8,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * Utility class for JWT token generation and validation.
@@ -28,14 +31,36 @@ public class JwtTokenProvider {
     @Value("${jwt.expiration}")
     private long jwtExpirationMs;
 
+    @Value("${jwt.access-token-ttl:}")
+    private String accessTokenTtl;
+
     private SecretKey key;
+    private long accessTokenTtlMs;
 
     /**
      * Initialize the signing key after properties are loaded.
+     * Fails fast when the secret is missing or too weak so a
+     * deployment with a known/weak secret can never start.
      */
     @PostConstruct
     public void init() {
-        this.key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        if (jwtSecret == null || jwtSecret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET must be set and >= 256 bits");
+        }
+        byte[] secretBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+        if (secretBytes.length < 32) {
+            throw new IllegalStateException(
+                    "JWT_SECRET must be set and >= 256 bits (32+ bytes), current length: "
+                            + secretBytes.length);
+        }
+        this.key = Keys.hmacShaKeyFor(secretBytes);
+
+        if (StringUtils.hasText(accessTokenTtl)) {
+            this.accessTokenTtlMs = Duration.parse(accessTokenTtl).toMillis();
+        } else {
+            this.accessTokenTtlMs = jwtExpirationMs;
+        }
+        log.info("JWT access token TTL configured: {} ms", accessTokenTtlMs);
     }
 
     /**
@@ -46,15 +71,7 @@ public class JwtTokenProvider {
      */
     public String generateToken(Authentication authentication) {
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
-
-        return Jwts.builder()
-                .subject(userDetails.getUsername())
-                .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(key)
-                .compact();
+        return generateToken(userDetails.getUsername());
     }
 
     /**
@@ -65,10 +82,11 @@ public class JwtTokenProvider {
      */
     public String generateToken(String username) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
+        Date expiryDate = new Date(now.getTime() + accessTokenTtlMs);
 
         return Jwts.builder()
                 .subject(username)
+                .id(UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(key)
@@ -79,7 +97,7 @@ public class JwtTokenProvider {
      * Get token expiration time in milliseconds.
      */
     public long getExpirationMs() {
-        return jwtExpirationMs;
+        return accessTokenTtlMs;
     }
 
     /**
@@ -96,6 +114,22 @@ public class JwtTokenProvider {
                 .getPayload();
 
         return claims.getSubject();
+    }
+
+    /**
+     * Extract the token identifier (jti claim) used for revocation.
+     *
+     * @param token the JWT token
+     * @return the jti value
+     */
+    public String getTokenId(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+
+        return claims.getId();
     }
 
     /**

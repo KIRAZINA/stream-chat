@@ -45,13 +45,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/h2-console/**") // Disable CSRF for H2 Console
-                        .disable()
-                )
+                .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .headers(headers -> headers
-                        .frameOptions(frame -> frame.sameOrigin()) // Allow H2 Console frames
+                        .frameOptions(frame -> frame.deny())
                 )
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -69,10 +66,9 @@ public class SecurityConfig {
                                 "/chat.html",
                                 "/api/auth/**",
                                 "/ws-chat/**",
-                                "/v3/api-docs/**",
+"/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
-                                "/h2-console/**",
                                 "/actuator/**"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET,

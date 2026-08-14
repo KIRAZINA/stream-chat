@@ -2,7 +2,6 @@ package com.streamchat.repository;
 
 import com.streamchat.model.entity.BannedUser;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -46,14 +45,18 @@ public interface BannedUserRepository extends JpaRepository<BannedUser, Long> {
     boolean existsByStreamIdAndUserIdAndIsActiveBan(Long streamId, Long userId);
 
     /**
-     * Delete ban record.
+     * Find the active ban record for a user in a stream.
+     * Activeness is computed in Java ({@code isActive()}), so the query mirrors
+     * the entity semantics: permanent bans are active, temporary ones only while
+     * {@code expires_at} is in the future.
      *
      * @param streamId the stream ID
      * @param userId the user ID
+     * @return the active ban, if any
      */
-    @Modifying
-    @Query("DELETE FROM BannedUser b WHERE b.streamId = :streamId AND b.userId = :userId")
-    void deleteByStreamIdAndUserId(Long streamId, Long userId);
+    @Query("SELECT b FROM BannedUser b WHERE b.streamId = :streamId AND b.userId = :userId " +
+            "AND (b.isPermanent = true OR b.expiresAt > CURRENT_TIMESTAMP)")
+    Optional<BannedUser> findActiveBanByStreamAndUser(Long streamId, Long userId);
 
     /**
      * Find expired bans for cleanup.

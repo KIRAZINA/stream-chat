@@ -29,6 +29,7 @@ public class MetricsService {
     private final Counter moderationActionsCounter;
     private final Counter rateLimitExceededCounter;
     private final Counter bannedMessagesCounter;
+    private final Counter slowModeRedisFallbackCounter;
 
     // Timer for message processing
     private final Timer messageProcessingTimer;
@@ -65,6 +66,11 @@ public class MetricsService {
         // Banned words detected
         this.bannedMessagesCounter = Counter.builder("chat.messages.banned_words")
                 .description("Total messages containing banned words")
+                .register(meterRegistry);
+
+        // Slow mode Redis fallback (fail-open)
+        this.slowModeRedisFallbackCounter = Counter.builder("chat.slowmode.redis_fallback")
+                .description("Total slow-mode checks that fell back to fail-open because Redis was unavailable")
                 .register(meterRegistry);
 
         // Message processing time
@@ -139,6 +145,14 @@ public class MetricsService {
      */
     public void recordBannedWordDetected() {
         bannedMessagesCounter.increment();
+    }
+
+    /**
+     * Record a slow-mode check that fell back to fail-open because Redis
+     * was unavailable.
+     */
+    public void recordSlowModeRedisFallback() {
+        slowModeRedisFallbackCounter.increment();
     }
 
     /**

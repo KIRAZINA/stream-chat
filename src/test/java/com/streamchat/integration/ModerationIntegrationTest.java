@@ -9,6 +9,7 @@ import com.streamchat.model.entity.UserStreamRole;
 import com.streamchat.model.enums.ModerationActionType;
 import com.streamchat.model.enums.Role;
 import com.streamchat.repository.ModerationLogRepository;
+import com.streamchat.repository.RefreshTokenRepository;
 import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserRoleRepository;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -82,8 +84,12 @@ class ModerationIntegrationTest {
     @MockBean
     private ModerationLogRepository moderationLogRepository;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
     @BeforeEach
     void cleanup() {
+        refreshTokenRepository.deleteAll();
         userStreamRoleRepository.deleteAll();
         streamRepository.deleteAll();
         userRoleRepository.deleteAll();
@@ -163,6 +169,102 @@ class ModerationIntegrationTest {
         mockMvc.perform(get("/api/streams/stream-abc/moderate/logs")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void moderator_cannot_ban_stream_owner() throws Exception {
+        String token = registerLoginAndMakeModerator("mod", "mod@example.com", "password123");
+        User owner = userRepository.findByUsername("owner").orElseThrow();
+
+        mockMvc.perform(post("/api/streams/stream-abc/moderate/ban")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", owner.getUsername(),
+                                "reason", "toxicity"
+                        ))))
+                .andExpect(status().isForbidden());
+
+        verify(moderationService, never()).banUser(anyLong(), anyLong(), anyLong(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    void moderator_cannot_ban_another_moderator() throws Exception {
+        String token = registerLoginAndMakeModerator("mod", "mod@example.com", "password123");
+        User otherMod = ensureUserExists("otherMod", "otherMod@example.com");
+        Long streamId = streamRepository.findByStreamKey("stream-abc").orElseThrow().getId();
+        userStreamRoleRepository.save(UserStreamRole.builder()
+                .user(otherMod)
+                .stream(streamRepository.findByStreamKey("stream-abc").orElseThrow())
+                .role(Role.ROLE_MODERATOR)
+                .build());
+
+        mockMvc.perform(post("/api/streams/stream-abc/moderate/ban")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", otherMod.getUsername(),
+                                "reason", "toxicity"
+                        ))))
+                .andExpect(status().isForbidden());
+
+        verify(moderationService, never()).banUser(anyLong(), anyLong(), anyLong(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    void owner_can_ban_moderator() throws Exception {
+        registerUser("owner", "owner@example.com", "password123");
+        ensureStreamExists("stream-abc");
+
+        registerUser("mod", "mod@example.com", "password123");
+        Stream stream = streamRepository.findByStreamKey("stream-abc").orElseThrow();
+        User mod = userRepository.findByUsername("mod").orElseThrow();
+        userStreamRoleRepository.save(UserStreamRole.builder()
+                .user(mod)
+                .stream(stream)
+                .role(Role.ROLE_MODERATOR)
+                .build());
+
+        String token = loginAndExtractToken("owner", "password123");
+
+        mockMvc.perform(post("/api/streams/stream-abc/moderate/ban")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "mod",
+                                "reason", "toxicity"
+                        ))))
+                .andExpect(status().isOk());
+    }
+
+    private void registerUser(String username, String email, String password) throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "email", email,
+                                "password", password
+                        ))))
+                .andExpect(status().isCreated());
+    }
+
+    private String loginAndExtractToken(String username, String password) throws Exception {
+        MvcResult login = mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", password
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String body = login.getResponse().getContentAsString();
+        return body.split("\"token\":\"")[1].split("\"", 2)[0];
     }
 
     private String registerLoginAndMakeModerator(String username, String email, String password) throws Exception {

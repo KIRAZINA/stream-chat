@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Repository for UserStreamRole entity operations.
@@ -22,9 +23,18 @@ public interface UserStreamRoleRepository extends JpaRepository<UserStreamRole, 
      * @param streamId the stream ID
      * @return list of roles
      */
-    @Query("SELECT r FROM UserStreamRole r WHERE r.user.id = :userId " +
+@Query("SELECT r FROM UserStreamRole r WHERE r.user.id = :userId " +
             "AND r.stream.id = :streamId")
     List<UserStreamRole> findByUserIdAndStreamId(Long userId, Long streamId);
+
+    /**
+     * Find roles for user in multiple streams (batched query).
+     *
+     * @param userId the user ID
+     * @param streamIds the stream IDs
+     * @return list of roles
+     */
+    List<UserStreamRole> findByUserIdAndStreamIdIn(Long userId, Set<Long> streamIds);
 
     /**
      * Find specific role for user in stream.
