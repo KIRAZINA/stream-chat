@@ -50,12 +50,12 @@ export default function ChatWindow({ streamKey }: ChatWindowProps) {
   };
 
   return (
-    <div className="grid h-full gap-4 rounded-3xl border border-slate-700 bg-slate-900/90 p-4"
+    <div className="grid h-full gap-4 rounded-3xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 p-4"
          style={{ gridTemplateRows: '56px 1fr auto auto' }}>
       {/* Header */}
-      <div className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3">
+      <div className="flex items-center justify-between rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-100 dark:bg-slate-950/80 px-4 py-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100">Stream Chat</h2>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Stream Chat</h2>
           <p className={`text-sm ${statusColor[connectionStatus]}`}>
             {statusLabel[connectionStatus]}
           </p>
@@ -74,7 +74,7 @@ export default function ChatWindow({ streamKey }: ChatWindowProps) {
       </div>
 
       {/* Message list */}
-      <div className="flex min-h-[380px] flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-950/80">
+      <div className="flex min-h-[380px] flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-950/80">
         <MessageList 
           messages={messages}
           currentUserId={user?.id || 0}

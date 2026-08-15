@@ -54,7 +54,9 @@ export class StreamStompClient {
 }
 
 function buildSockJsUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  let trimmed = baseUrl.trim().replace(/\/+$/, "");
+  // SockJS uses HTTP transport, not WebSocket — convert ws(s):// to http(s)://
+  trimmed = trimmed.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
   if (!trimmed || trimmed === ".") {
     return "/ws-chat";
   }

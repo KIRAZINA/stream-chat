@@ -1,0 +1,35 @@
+# Build artifacts
+target/
+build/
+*.jar
+*.war
+
+# IDE
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Environment
+.env
+.env.*
+
+# Frontend (separate build context)
+frontend/
+
+# Logs
+logs/
+*.log
+
+# Temp
+*.swp
+*.tmp

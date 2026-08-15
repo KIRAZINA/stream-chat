@@ -46,11 +46,12 @@ export default function MessageList({ messages, currentUserId, onRequestContextM
       <div aria-live="polite" className="space-y-1">
         {messages.map((msg, i) => (
           <MessageItem 
-            key={getMessageKey(msg, i)}
-            message={msg} 
-            showAvatar={shouldShowAvatar(i)}
-            onRequestContextMenu={onRequestContextMenu}
-          />
+             key={getMessageKey(msg, i)}
+             message={msg} 
+             showAvatar={shouldShowAvatar(i)}
+             isOwnMessage={msg.userId === currentUserId}
+             onRequestContextMenu={onRequestContextMenu}
+           />
         ))}
       </div>
       

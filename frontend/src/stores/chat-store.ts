@@ -48,7 +48,7 @@ export const useChatStore = create<ChatState>((set) => ({
   setReply: (reply) => set({ selectedReply: reply }),
   setUI: (ui) => set((state) => ({ ui: { ...state.ui, ...ui } })),
   setContextMenu: (menu) => set({ contextMenu: menu }),
-  closeContextMenu: =>
+  closeContextMenu: () =>
     set((state) => ({ contextMenu: { ...state.contextMenu, isOpen: false } })),
   setLastSeenMessageId: (id) => set({ lastSeenMessageId: id })
 }));

@@ -1,0 +1,21 @@
+# Build artifacts
+node_modules/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+
+# Env
+.env
+.env.local
+.env.development
+.env.production

@@ -98,7 +98,7 @@ class ChatServiceTest {
 
         lenient().when(streamAuthorizationService.canModerate(anyString(), anyString())).thenReturn(false);
         lenient().when(userStreamRoleRepository.findByUserIdAndStreamId(anyLong(), anyLong())).thenReturn(List.of());
-        lenient().when(userBadgeRepository.findBadgeTypesByUserIdAndStreamIdOrGlobal(anyLong(), anyLong())).thenReturn(List.of());
+        lenient().when(userBadgeRepository.findBadgeTypesByUserIdAndStreamIdOrGlobalIn(anySet(), anySet())).thenReturn(List.of());
         lenient().when(userBadgeRepository.hasBadge(anyLong(), anyLong(), anyString())).thenReturn(false);
         lenient().when(userBadgeRepository.hasBadgeGrantedBefore(anyLong(), anyLong(), anyString(), any(LocalDateTime.class)))
                 .thenReturn(false);

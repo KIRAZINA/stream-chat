@@ -4,7 +4,6 @@ import { useChatStore } from "../stores/chat-store";
 import { StreamStompClient } from "../services/stomp-client";
 import { streamsApi } from "../api/streams";
 import { ChatMessageDTO } from "../types/backend";
-import { deduplicate } from "./useStompChat";
 
 const getStompClient = (): StreamStompClient => {
   let wsUrl = import.meta.env.VITE_WS_URL;
@@ -23,7 +22,7 @@ const getStompClient = (): StreamStompClient => {
 };
 
 export function useStompChat(streamKey: string) {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const stompClientRef = useRef<StreamStompClient | null>(null);
   const [messages, setMessages] = useState<ChatMessageDTO[]>([]);
   const [connectionState, setConnectionState] = useState<
@@ -136,8 +135,8 @@ export function useStompChat(streamKey: string) {
           tempId,
           idempotencyKey: crypto.randomUUID(),
           streamId: 0,
-          userId: 0,
-          username: "You",
+          userId: user?.id ?? 0,
+          username: user?.username ?? "You",
           content,
           messageType: "CHAT",
           timestamp: new Date().toISOString(),
@@ -157,7 +156,7 @@ export function useStompChat(streamKey: string) {
         );
       }
     },
-    [streamKey],
+    [streamKey, user?.username],
   );
 
   return { messages, connectionState, sendMessage, error };

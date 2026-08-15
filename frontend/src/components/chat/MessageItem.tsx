@@ -31,7 +31,7 @@ export function MessageItem({
 
   return (
     <article
-      className={`group flex gap-3 px-4 py-2 transition-colors hover:bg-slate-800/50 ${
+      className={`group flex gap-3 px-4 py-2 transition-colors hover:bg-gray-100 dark:hover:bg-slate-800/50 ${
         message.isPinned ? 'border-l-2 border-yellow-400 bg-yellow-400/5' : ''
       } ${message.isDeleted ? 'opacity-50' : ''}`}
       onContextMenu={handleContextMenu}
@@ -52,7 +52,7 @@ export function MessageItem({
         <div className="flex flex-wrap items-baseline gap-x-2 mb-0.5">
           <span
             className={`font-semibold text-sm ${
-              isOwnMessage ? 'text-blue-400' : 'text-slate-200'
+              isOwnMessage ? 'text-blue-400' : 'text-gray-900 dark:text-slate-200'
             }`}
             style={message.color ? { color: message.color } : undefined}
           >
@@ -70,7 +70,7 @@ export function MessageItem({
             </span>
           )}
 
-          <span className="text-xs text-slate-500">{formatTimestamp(message.timestamp)}</span>
+           <span className="text-xs text-slate-400 dark:text-slate-400">{formatTimestamp(message.timestamp)}</span>
 
           {message.isPinned && (
             <span className="text-xs text-yellow-400" title="Pinned message">
@@ -81,7 +81,7 @@ export function MessageItem({
 
         {/* Reply preview */}
         {message.replyToUsername && (
-          <div className="mb-1 text-xs text-slate-400 border-l-2 border-slate-600 pl-2">
+          <div             className="mb-1 text-xs text-gray-600 dark:text-slate-400 border-l-2 border-slate-600 pl-2">
             <span className="font-semibold">@{message.replyToUsername}</span>
             {message.replyToContentPreview && (
               <span className="ml-1 truncate">{message.replyToContentPreview}</span>
@@ -93,9 +93,9 @@ export function MessageItem({
         {message.isDeleted ? (
           <span className="text-gray-500 italic line-through text-sm">💀 Message deleted</span>
         ) : message.fragments?.length ? (
-          <p className="break-words text-gray-100">{renderFragments(message.fragments)}</p>
+          <p className="break-words text-gray-900 dark:text-gray-100">{renderFragments(message.fragments)}</p>
         ) : (
-          <p className="break-words text-gray-100">{linkifyText(message.content)}</p>
+          <p className="break-words text-gray-900 dark:text-gray-100">{linkifyText(message.content)}</p>
         )}
 
         {/* Pinned-by attribution */}

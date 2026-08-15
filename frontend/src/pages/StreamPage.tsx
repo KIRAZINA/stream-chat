@@ -30,7 +30,7 @@ const StreamPage = () => {
   }, [streamQuery.data]);
 
    if (!streamKey) {
-     return <div className="p-6 text-slate-200">Invalid stream key.</div>;
+      return <div className="p-6 text-gray-900 dark:text-slate-200">Invalid stream key.</div>;
    }
 
   return (

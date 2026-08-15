@@ -3,51 +3,25 @@ package com.streamchat.controller;
 import com.streamchat.model.dto.ChatMessageDTO;
 import com.streamchat.model.enums.MessageType;
 import com.streamchat.service.ChatService;
-import com.streamchat.service.ModerationService;
-import com.streamchat.service.RedisMessagePublisher;
-import com.streamchat.service.StreamAuthorizationService;
-import com.streamchat.repository.StreamRepository;
-import com.streamchat.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.security.Principal;
 
-import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ChatControllerTest {
 
     @Mock
     private ChatService chatService;
-
-    @Mock
-    private ModerationService moderationService;
-
-    @Mock
-    private SimpMessagingTemplate messagingTemplate;
-
-    @Mock
-    private StreamRepository streamRepository;
-
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private StreamAuthorizationService streamAuthorizationService;
-
-    @Mock
-    private ObjectProvider<RedisMessagePublisher> redisMessagePublisherProvider;
-
-    @Mock
-    private RedisMessagePublisher redisMessagePublisher;
 
     @InjectMocks
     private ChatController chatController;
@@ -67,47 +41,53 @@ class ChatControllerTest {
     }
 
     @Test
-    void sendMessage_WithoutRedisPublisher_BroadcastsLocally() {
-        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT, null))
+    void sendMessage_ValidRequest_ReturnsMessage() {
+        ChatController.SendMessageRequest request = new ChatController.SendMessageRequest();
+        request.setContent("Hello, world!");
+        request.setMessageType(MessageType.CHAT);
+
+        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT, null, null))
                 .thenReturn(savedMessage);
-        when(redisMessagePublisherProvider.getIfAvailable()).thenReturn(null);
 
-        chatController.sendMessage("stream-1", ChatMessageDTO.builder().content("Hello, world!").build(), principal);
+        ChatMessageDTO result = chatController.sendMessage("stream-1", request, principal).getBody();
 
-        verify(messagingTemplate).convertAndSend("/topic/stream/stream-1", savedMessage);
-        verify(redisMessagePublisherProvider).getIfAvailable();
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
+        assertEquals("Hello, world!", result.getContent());
     }
 
     @Test
-    void sendMessage_WithRedisPublisher_PublishesWithoutLocalBroadcast() {
-        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT, null))
+    void sendMessage_NullMessageType_DefaultsToChat() {
+        ChatController.SendMessageRequest request = new ChatController.SendMessageRequest();
+        request.setContent("Hello, world!");
+
+        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT, null, null))
                 .thenReturn(savedMessage);
-        when(redisMessagePublisherProvider.getIfAvailable()).thenReturn(redisMessagePublisher);
-        when(redisMessagePublisher.publish("stream-1", savedMessage)).thenReturn(true);
 
-        chatController.sendMessage("stream-1", ChatMessageDTO.builder().content("Hello, world!").build(), principal);
+        ChatMessageDTO result = chatController.sendMessage("stream-1", request, principal).getBody();
 
-        verify(redisMessagePublisher).publish("stream-1", savedMessage);
-        verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
+        assertNotNull(result);
+        ArgumentCaptor<MessageType> typeCaptor = ArgumentCaptor.forClass(MessageType.class);
+        verify(chatService).sendMessage(eq("stream-1"), eq("testuser"), eq("Hello, world!"),
+                typeCaptor.capture(), isNull(), isNull());
+        assertEquals(MessageType.CHAT, typeCaptor.getValue());
     }
 
     @Test
-    void sendMessage_WhenRedisPublishFails_FallsBackToLocalBroadcast() {
-        when(chatService.sendMessage("stream-1", "testuser", "Hello, world!", MessageType.CHAT, null))
+    void sendMessage_WithReplyAndIdempotencyKey_DelegatesCorrectly() {
+        ChatController.SendMessageRequest request = new ChatController.SendMessageRequest();
+        request.setContent("Reply message");
+        request.setMessageType(MessageType.CHAT);
+        request.setReplyToMessageId(42L);
+        request.setIdempotencyKey("req-abc-123");
+
+        when(chatService.sendMessage("stream-1", "testuser", "Reply message", MessageType.CHAT, 42L, "req-abc-123"))
                 .thenReturn(savedMessage);
-        when(redisMessagePublisherProvider.getIfAvailable()).thenReturn(redisMessagePublisher);
-        when(redisMessagePublisher.publish("stream-1", savedMessage)).thenReturn(false);
 
-        chatController.sendMessage("stream-1", ChatMessageDTO.builder().content("Hello, world!").build(), principal);
+        ChatMessageDTO result = chatController.sendMessage("stream-1", request, principal).getBody();
 
-        verify(redisMessagePublisher).publish("stream-1", savedMessage);
-        verify(messagingTemplate).convertAndSend("/topic/stream/stream-1", savedMessage);
-    }
-
-    @Test
-    void sendMessage_Unauthenticated_DoesNothing() {
-        chatController.sendMessage("stream-1", ChatMessageDTO.builder().content("Hello").build(), null);
-
-        verifyNoInteractions(chatService, messagingTemplate, redisMessagePublisherProvider, redisMessagePublisher);
+        assertNotNull(result);
+        verify(chatService).sendMessage("stream-1", "testuser", "Reply message",
+                MessageType.CHAT, 42L, "req-abc-123");
     }
 }

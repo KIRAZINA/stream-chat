@@ -13,8 +13,10 @@ import com.streamchat.model.entity.Emote;
 import com.streamchat.model.entity.Stream;
 import com.streamchat.model.entity.UserStreamRole;
 import com.streamchat.model.entity.User;
+import com.streamchat.model.enums.MessageFragmentType;
 import com.streamchat.model.enums.MessageType;
 import com.streamchat.model.enums.Role;
+import com.streamchat.model.enums.UserBadge;
 import com.streamchat.repository.ChatMessageRepository;
 import com.streamchat.repository.EmoteRepository;
 import com.streamchat.repository.StreamRepository;
@@ -45,6 +47,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Service for handling chat message operations.
@@ -71,7 +75,7 @@ public class ChatService {
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
 
-    private final Cache<String, List<String>> userBadgeCache = Caffeine.newBuilder()
+    private final Cache<BadgeCacheKey, List<String>> userBadgeCache = Caffeine.newBuilder()
             .expireAfterWrite(5, TimeUnit.MINUTES)
             .maximumSize(1000)
             .build();
@@ -80,6 +84,19 @@ public class ChatService {
             .expireAfterWrite(5, TimeUnit.MINUTES)
             .maximumSize(500)
             .build();
+
+    private final Cache<String, Map<String, Emote>> streamEmoteCache = Caffeine.newBuilder()
+            .expireAfterWrite(5, TimeUnit.MINUTES)
+            .maximumSize(1000)
+            .build();
+
+    private static final String RECENT_MESSAGES_KEY = "recent_messages:";
+    private static final int RECENT_MESSAGES_LIMIT = 100;
+    private static final String SLOW_MODE_KEY = "slowmode:";
+    private static final int DEFAULT_HISTORY_LIMIT = 100;
+    private static final int MAX_HISTORY_LIMIT = 500;
+    private static final String SUBSCRIBER_BADGE = UserBadge.SUBSCRIBER.name();
+    private static final String FOLLOWER_BADGE = UserBadge.FOLLOWER.name();
 
     private record BadgeCacheKey(Long userId, Long streamId) {
         @Override
@@ -714,24 +731,24 @@ public class ChatService {
 
         Map<String, Emote> emoteMap = streamEmoteCache.getIfPresent(
                 String.valueOf(message.getStream().getId()));
-if (emoteMap == null) {
-    emoteMap = emoteService.getStreamEmotes(message.getStream().getId());
-    streamEmoteCache.put(String.valueOf(message.getStream().getId()), emoteMap);
-}
+        if (emoteMap == null) {
+            emoteMap = emoteService.getStreamEmotes(message.getStream().getId()).stream()
+                    .collect(Collectors.toMap(Emote::getCode, Function.identity()));
+            streamEmoteCache.put(String.valueOf(message.getStream().getId()), emoteMap);
+        }
 
-List<MessageFragmentDTO> fragments = new ArrayList<>();
-// Reuse the same parsing logic as buildMessageFragments but with cached emoteMap
-String content = message.getContent();
-if (content != null && !content.isEmpty()) {
-    Pattern pattern = Pattern.compile("(:[A-Za-z0-9_]+:)");
-    Matcher matcher = pattern.matcher(content);
+        List<MessageFragmentDTO> fragments = new ArrayList<>();
+        String messageContent = message.getContent();
+        if (messageContent != null && !messageContent.isEmpty()) {
+            Pattern pattern = Pattern.compile("(:[A-Za-z0-9_]+:)");
+            Matcher matcher = pattern.matcher(messageContent);
     int lastIndex = 0;
     while (matcher.find()) {
         if (matcher.start() > lastIndex) {
             fragments.add(MessageFragmentDTO.builder()
                     .type(MessageFragmentType.TEXT)
-                    .text(content.substring(lastIndex, matcher.start()))
-                    .build());
+                    .text(messageContent.substring(lastIndex, matcher.start()))
+                     .build());
         }
         String token = matcher.group(1);
         String code = normalizeEmoteToken(token);
@@ -751,10 +768,10 @@ if (content != null && !content.isEmpty()) {
         }
         lastIndex = matcher.end();
     }
-    if (lastIndex < content.length()) {
+    if (lastIndex < messageContent.length()) {
         fragments.add(MessageFragmentDTO.builder()
                 .type(MessageFragmentType.TEXT)
-                .text(content.substring(lastIndex))
+                .text(messageContent.substring(lastIndex))
                 .build());
     }
 }
