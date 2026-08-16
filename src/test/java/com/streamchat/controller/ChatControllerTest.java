@@ -3,6 +3,7 @@ package com.streamchat.controller;
 import com.streamchat.model.dto.ChatMessageDTO;
 import com.streamchat.model.enums.MessageType;
 import com.streamchat.service.ChatService;
+import com.streamchat.service.MessageBroadcastService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +23,9 @@ class ChatControllerTest {
 
     @Mock
     private ChatService chatService;
+
+    @Mock
+    private MessageBroadcastService messageBroadcastService;
 
     @InjectMocks
     private ChatController chatController;
@@ -54,6 +58,8 @@ class ChatControllerTest {
         assertNotNull(result);
         assertEquals(1L, result.getId());
         assertEquals("Hello, world!", result.getContent());
+        // REST sends must force the Redis path so every instance broadcasts.
+        verify(messageBroadcastService).broadcastMessage(eq("stream-1"), eq(savedMessage), eq(true));
     }
 
     @Test

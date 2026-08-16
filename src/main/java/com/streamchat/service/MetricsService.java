@@ -30,6 +30,8 @@ public class MetricsService {
     private final Counter rateLimitExceededCounter;
     private final Counter bannedMessagesCounter;
     private final Counter slowModeRedisFallbackCounter;
+    private final Counter broadcastLocalCounter;
+    private final Counter broadcastOrphanedCounter;
 
     // Timer for message processing
     private final Timer messageProcessingTimer;
@@ -71,6 +73,15 @@ public class MetricsService {
         // Slow mode Redis fallback (fail-open)
         this.slowModeRedisFallbackCounter = Counter.builder("chat.slowmode.redis_fallback")
                 .description("Total slow-mode checks that fell back to fail-open because Redis was unavailable")
+                .register(meterRegistry);
+
+        // Local-first broadcast
+        this.broadcastLocalCounter = Counter.builder("chat.broadcast.local")
+                .description("Total messages delivered directly via the local broker (no Redis round trip)")
+                .register(meterRegistry);
+
+        this.broadcastOrphanedCounter = Counter.builder("chat.broadcast.orphaned")
+                .description("Total messages broadcast locally to a stream with zero subscribers")
                 .register(meterRegistry);
 
         // Message processing time
@@ -153,6 +164,20 @@ public class MetricsService {
      */
     public void recordSlowModeRedisFallback() {
         slowModeRedisFallbackCounter.increment();
+    }
+
+    /**
+     * Record a message delivered directly via the local broker.
+     */
+    public void recordBroadcastLocal() {
+        broadcastLocalCounter.increment();
+    }
+
+    /**
+     * Record a local broadcast that had zero subscribers.
+     */
+    public void recordBroadcastOrphaned() {
+        broadcastOrphanedCounter.increment();
     }
 
     /**

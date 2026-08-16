@@ -1,5 +1,6 @@
 package com.streamchat.config;
 
+import com.streamchat.repository.StreamRepository;
 import com.streamchat.security.JwtTokenProvider;
 import com.streamchat.service.StreamAuthorizationService;
 import jakarta.annotation.PostConstruct;
@@ -46,6 +47,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final JwtTokenProvider tokenProvider;
     private final UserDetailsService userDetailsService;
     private final StreamAuthorizationService streamAuthorizationService;
+    private final StreamRepository streamRepository;
 
     @Value("${app.websocket.allowed-origins}")
     private String allowedOrigins;
@@ -131,12 +133,36 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     /**
      * Register STOMP endpoints for WebSocket connections.
      * Enables SockJS fallback options for browsers that don't support WebSocket.
+     *
+     * Track A · Item 1: a native WebSocket endpoint /ws-chat/stream/{streamKey}
+     * is registered WITHOUT SockJS so the URL path carries the stream key and a
+     * load balancer can consistent-hash on it. Spring 6.1 resolves the
+     * {streamKey} URI template variable (WebSocketHandlerMapping extends
+     * SimpleUrlHandlerMapping) and exposes it via HandlerMapping
+     * .URI_TEMPLATE_VARIABLES_ATTRIBUTE, which StreamAffinityHandshakeInterceptor
+     * reads to validate the stream and store the key in session attributes.
+     * The legacy /ws-chat SockJS endpoint is preserved unchanged for rollback.
      */
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws-chat")
                 .setAllowedOriginPatterns(parseOrigins().toArray(new String[0]))
                 .withSockJS();
+
+        registry.addEndpoint("/ws-chat/stream/{streamKey}")
+                .setAllowedOriginPatterns(parseOrigins().toArray(new String[0]))
+                .addInterceptors(streamAffinityHandshakeInterceptor());
+    }
+
+    /**
+     * Handshake interceptor shared by the stream-keyed endpoint: validates the
+     * {streamKey} path variable refers to an existing stream and stashes the
+     * key in session attributes. Runs on every connection to /ws-chat/stream/*
+     * so it deliberately performs a cheap exists-by-key lookup.
+     */
+    @Bean
+    public StreamAffinityHandshakeInterceptor streamAffinityHandshakeInterceptor() {
+        return new StreamAffinityHandshakeInterceptor(streamRepository);
     }
 
     /**

@@ -90,11 +90,11 @@ public class ChatService {
             .maximumSize(1000)
             .build();
 
-    private static final String RECENT_MESSAGES_KEY = "recent_messages:";
+    private static final String RECENT_MESSAGES_KEY = "recent:messages:";
     private static final int RECENT_MESSAGES_LIMIT = 100;
-    private static final String SLOW_MODE_KEY = "slowmode:";
-    private static final int DEFAULT_HISTORY_LIMIT = 100;
-    private static final int MAX_HISTORY_LIMIT = 500;
+    private static final String SLOW_MODE_KEY = "slowmode:lastmessage:";
+    private static final int DEFAULT_HISTORY_LIMIT = 50;
+    private static final int MAX_HISTORY_LIMIT = 100;
     private static final String SUBSCRIBER_BADGE = UserBadge.SUBSCRIBER.name();
     private static final String FOLLOWER_BADGE = UserBadge.FOLLOWER.name();
 

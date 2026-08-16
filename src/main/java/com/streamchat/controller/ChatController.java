@@ -3,6 +3,7 @@ package com.streamchat.controller;
 import com.streamchat.model.dto.ChatMessageDTO;
 import com.streamchat.model.enums.MessageType;
 import com.streamchat.service.ChatService;
+import com.streamchat.service.MessageBroadcastService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -24,6 +25,7 @@ import java.security.Principal;
 public class ChatController {
 
     private final ChatService chatService;
+    private final MessageBroadcastService messageBroadcastService;
 
     @PostMapping("/{streamKey}/messages")
     public ResponseEntity<ChatMessageDTO> sendMessage(
@@ -43,6 +45,10 @@ public class ChatController {
                 messageType,
                 request.getReplyToMessageId(),
                 request.getIdempotencyKey());
+
+        // A REST send can land on ANY instance, so it must never use local-first
+        // delivery: force the Redis fan-out path so all instances broadcast.
+        messageBroadcastService.broadcastMessage(streamKey, dto, true);
 
         return ResponseEntity.ok(dto);
     }

@@ -1,5 +1,6 @@
 package com.streamchat.config;
 
+import com.streamchat.repository.StreamRepository;
 import com.streamchat.security.JwtTokenProvider;
 import com.streamchat.service.StreamAuthorizationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,8 @@ class WebSocketConfigTest {
         config = new WebSocketConfig(
                 mock(JwtTokenProvider.class),
                 mock(UserDetailsService.class),
-                mock(StreamAuthorizationService.class));
+                mock(StreamAuthorizationService.class),
+                mock(StreamRepository.class));
     }
 
     private void setOrigins(String value) {
