@@ -40,14 +40,6 @@ public interface TimedOutUserRepository extends JpaRepository<TimedOutUser, Long
     boolean existsByStreamIdAndUserIdAndActiveTimeout(Long streamId, Long userId, LocalDateTime now);
 
     /**
-     * Find all timeouts for a stream.
-     *
-     * @param streamId the stream ID
-     * @return list of timeouts
-     */
-    List<TimedOutUser> findByStreamId(Long streamId);
-
-    /**
      * Find expired timeouts for cleanup.
      *
      * @param now current timestamp

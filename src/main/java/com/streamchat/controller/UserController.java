@@ -33,6 +33,7 @@ public class UserController {
         dto.setId(user.getId());
         dto.setUsername(user.getUsername());
         dto.setEmail(user.getEmail());
+        dto.setColor(user.getColor());
         dto.setRoles(user.getRoles().stream().map(userRole -> userRole.getRole().toString()).toList());
         dto.setStreamRoles(user.getStreamRoles().stream().map(this::mapToRoleDTO).toList());
 

@@ -33,12 +33,4 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     @Query("SELECT CASE WHEN COUNT(r) > 0 THEN true ELSE false END FROM UserRole r " +
             "WHERE r.user.id = :userId AND r.role = :role")
     boolean existsByUserIdAndRole(Long userId, Role role);
-
-    /**
-     * Delete a specific role from user.
-     *
-     * @param userId the user ID
-     * @param role the role
-     */
-    void deleteByUserIdAndRole(Long userId, Role role);
 }

@@ -1,3 +1,16 @@
+# Stream Chat — Docker Compose
+#
+# LOCAL-DEV DEFAULTS: every variable below has a default so a plain
+#   docker compose up --build -d
+# works with no manual setup (no openssl, no .env required). All defaults
+# here are DEV-ONLY (weak credentials, shared JWT secret). For anything
+# shared or deployed, set real values in your .env / CI secrets —
+# copy .env.example to .env and override them.
+#
+# If Postgres auth fails on an EXISTING volume (stale credentials from an
+# earlier run), wipe it once:
+#   docker compose down -v && docker compose up --build -d
+
 services:
   stream-chat-app:
     build:
@@ -9,13 +22,16 @@ services:
     env_file:
       - .env
     environment:
-      SPRING_DATASOURCE_URL: ${DATABASE_URL}
-      SPRING_DATASOURCE_USERNAME: ${DATABASE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD}
-      SPRING_REDIS_HOST: ${REDIS_HOST}
-      SPRING_REDIS_PORT: ${REDIS_PORT:-6379}
+      SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/stream_chat_db}
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USERNAME:-stream_chat_user}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-stream_chat_pass}
+      SPRING_DATA_REDIS_HOST: ${REDIS_HOST:-redis}
+      SPRING_DATA_REDIS_PORT: ${REDIS_PORT:-6379}
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      # DEV-ONLY default so `docker compose up` works without openssl. The app
+      # refuses to start with a secret shorter than 32 bytes. Override JWT_SECRET
+      # in .env for anything shared or deployed.
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-please-change-in-production-must-be-at-least-64-characters-long}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-PT15M}
       JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-P30D}
@@ -44,6 +60,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # Vite bakes these in at build time. Defaults are EMPTY so the SPA uses
+      # same-origin /api and /ws-chat and nginx proxies them to the backend —
+      # no CORS, works with zero config. Override for custom deployments.
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_WS_URL: ${VITE_WS_URL:-}
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
     container_name: stream-chat-frontend
     ports:
       - "3000:80"
@@ -56,9 +79,9 @@ services:
     image: postgres:15-alpine
     container_name: stream-chat-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-stream_chat_db}
+      POSTGRES_USER: ${POSTGRES_USER:-stream_chat_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stream_chat_pass}
     ports:
       - "5432:5432"
     volumes:
@@ -66,7 +89,7 @@ services:
     networks:
       - stream-chat-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stream_chat_user} -d ${POSTGRES_DB:-stream_chat_db}"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -4,6 +4,7 @@ import { useChatStore } from "../stores/chat-store";
 import { StreamStompClient } from "../services/stomp-client";
 import { streamsApi } from "../api/streams";
 import { ChatMessageDTO } from "../types/backend";
+import { toast } from "react-hot-toast";
 
 const getStompClient = (streamKey: string): StreamStompClient => {
   let wsUrl = import.meta.env.VITE_WS_URL;
@@ -41,6 +42,7 @@ export function useStompChat(streamKey: string) {
 
     let isDisposed = false;
     let unsubscribe: (() => void) | undefined;
+    let unsubscribeErrors: (() => void) | undefined;
     let client: StreamStompClient | null = null;
 
     const connectAndSubscribe = async (): Promise<void> => {
@@ -79,6 +81,23 @@ export function useStompChat(streamKey: string) {
             }
           },
         );
+
+        // Subscribe to per-user send errors (slow mode, char limit, banned,
+        // etc.). The server echoes the idempotencyKey of the failed message so
+        // the matching optimistic message is removed instead of lingering as a
+        // ghost, and the user sees why it was rejected.
+        unsubscribeErrors = client.subscribe<ChatMessageDTO>(
+          "/user/queue/errors",
+          (msg) => {
+            if (msg.messageType !== "ERROR") return;
+            if (msg.idempotencyKey) {
+              setMessages((prev) =>
+                prev.filter((m) => m.idempotencyKey !== msg.idempotencyKey),
+              );
+            }
+            toast.error(msg.content || "Your message was rejected");
+          },
+        );
       } catch (err) {
         if (isDisposed) {
           return;
@@ -97,6 +116,7 @@ export function useStompChat(streamKey: string) {
     return () => {
       isDisposed = true;
       unsubscribe?.();
+      unsubscribeErrors?.();
       client?.disconnect();
       if (stompClientRef.current === client) {
         stompClientRef.current = null;
@@ -137,6 +157,7 @@ export function useStompChat(streamKey: string) {
           streamId: 0,
           userId: user?.id ?? 0,
           username: user?.username ?? "You",
+          color: user?.color,
           content,
           messageType: "CHAT",
           timestamp: new Date().toISOString(),
@@ -156,7 +177,7 @@ export function useStompChat(streamKey: string) {
         );
       }
     },
-    [streamKey, user?.username],
+    [streamKey, user?.username, user?.color, user?.id],
   );
 
   return { messages, connectionState, sendMessage, error };

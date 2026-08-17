@@ -4,7 +4,7 @@ import com.streamchat.model.dto.MessageFragmentDTO;
 import com.streamchat.model.enums.MessageType;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -33,14 +33,14 @@ public class ChatMessageDTO {
     private Boolean isDeleted;
     private Long deletedById;
     private String deletedByUsername;
-    private LocalDateTime deletedAt;
+    private OffsetDateTime deletedAt;
 
     private Boolean isPinned;
-    private LocalDateTime pinnedAt;
+    private OffsetDateTime pinnedAt;
     private String pinnedByUsername;
 
     private String idempotencyKey;
     private Long redisSequenceId;
 
-    private LocalDateTime timestamp;
+    private OffsetDateTime timestamp;
 }

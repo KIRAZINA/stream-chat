@@ -4,13 +4,15 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import SystemMessage from './SystemMessage';
 import { UserContextMenu } from '../moderation/UserContextMenu';
 import { useStompChat } from '../../hooks/useStompChat';
 import { useAuthStore } from '../../stores/auth-store';
-import { ChatMessageDTO } from '../../types/backend';
+import { fetchSettings } from '../../api/streams';
+import { ChatMessageDTO, StreamSettings } from '../../types/backend';
 
 interface ChatWindowProps {
   streamKey: string;
@@ -24,6 +26,16 @@ export default function ChatWindow({ streamKey }: ChatWindowProps) {
 
   const { connectionState, sendMessage, messages } = useStompChat(streamKey);
   const { user, hasRole } = useAuthStore();
+
+  // Shares the react-query cache with the settings sidebar so the char limit
+  // and counter appear in the input without a second request. Non-broadcasters
+  // get the same 403 the settings form already surfaces; the server still
+  // enforces the limit and rejection feedback arrives via the STOMP error queue.
+  const { data: settings } = useQuery<StreamSettings>({
+    queryKey: ['stream-settings', streamKey],
+    queryFn: () => fetchSettings(streamKey),
+    enabled: Boolean(streamKey),
+  });
 
   const canModerate = hasRole('ROLE_MODERATOR') || hasRole('ROLE_ADMIN') || hasRole('ROLE_BROADCASTER');
 
@@ -100,6 +112,7 @@ export default function ChatWindow({ streamKey }: ChatWindowProps) {
       <MessageInput
         onSend={handleSend}
         disabled={connectionStatus !== 'connected'}
+        maxLength={settings?.maxMessageLength}
       />
 
       {/* Context menu */}

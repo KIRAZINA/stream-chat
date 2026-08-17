@@ -14,6 +14,11 @@ const mocks = vi.hoisted(() => ({
   isConnected: vi.fn(),
 }));
 
+const toastMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+}));
+
 const streamsApiMocks = vi.hoisted(() => ({
   getReplayWindow: vi.fn(),
 }));
@@ -27,6 +32,10 @@ vi.mock("../services/stomp-client", () => ({
     publish = mocks.publish;
     isConnected = mocks.isConnected;
   },
+}));
+
+vi.mock("react-hot-toast", () => ({
+  toast: toastMocks,
 }));
 
 vi.mock("../api/streams", () => ({
@@ -154,8 +163,10 @@ describe("useStompChat gap replay on reconnect", () => {
     );
 
     let subscribeCallback: ((msg: ChatMessageDTO) => void) | undefined;
-    mocks.subscribe.mockImplementation((_dest: string, cb: (msg: ChatMessageDTO) => void) => {
-      subscribeCallback = cb;
+    mocks.subscribe.mockImplementation((dest: string, cb: (msg: ChatMessageDTO) => void) => {
+      if (dest === "/topic/stream/stream-1") {
+        subscribeCallback = cb;
+      }
       return () => {};
     });
 
@@ -182,5 +193,104 @@ describe("useStompChat gap replay on reconnect", () => {
     });
     expect(api.messages.map((m) => m.id)).toEqual([6, 7]);
     expect(api.messages.filter((m) => m.id === 7)).toHaveLength(1);
+  });
+});
+
+describe("useStompChat rejection feedback", () => {
+  beforeEach(() => {
+    mocks.setAuthToken.mockReset();
+    mocks.connect.mockReset();
+    mocks.disconnect.mockReset();
+    mocks.subscribe.mockReset();
+    mocks.publish.mockReset();
+    mocks.isConnected.mockReset();
+    toastMocks.error.mockReset();
+    toastMocks.success.mockReset();
+
+    mocks.connect.mockResolvedValue(undefined);
+    mocks.isConnected.mockReturnValue(true);
+    mocks.subscribe.mockReturnValue(() => {});
+
+    streamsApiMocks.getReplayWindow.mockReset();
+    streamsApiMocks.getReplayWindow.mockResolvedValue({
+      messages: [],
+      totalCount: 0,
+      hasMore: false,
+    });
+
+    useChatStore.getState().clearMessages();
+
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: "alice",
+        email: "alice@example.com",
+        color: "#22c55e",
+        roles: [],
+        streamRoles: [],
+      },
+      token: "test-token",
+      refreshToken: "refresh-token",
+      expiryTime: Date.now() + 60_000,
+    });
+  });
+
+  it("removes the rejected optimistic message and toasts the reason", async () => {
+    let topicCallback: ((msg: ChatMessageDTO) => void) | undefined;
+    let errorCallback: ((msg: ChatMessageDTO) => void) | undefined;
+    mocks.subscribe.mockImplementation((dest: string, cb: (msg: ChatMessageDTO) => void) => {
+      if (dest === "/topic/stream/stream-1") topicCallback = cb;
+      if (dest === "/user/queue/errors") errorCallback = cb;
+      return () => {};
+    });
+
+    render(<Harness streamKey="stream-1" />);
+    await waitFor(() => expect(errorCallback).toBeDefined());
+
+    act(() => {
+      api.sendMessage("hello");
+    });
+    expect(api.messages).toHaveLength(1);
+    const key = api.messages[0].idempotencyKey as string;
+
+    act(() => {
+      errorCallback?.({
+        ...message(0, "Slow mode is enabled"),
+        messageType: "ERROR",
+        idempotencyKey: key,
+      });
+    });
+
+    expect(api.messages).toHaveLength(0);
+    expect(toastMocks.error).toHaveBeenCalledWith("Slow mode is enabled");
+  });
+
+  it("removes only the optimistic message matching the rejected idempotencyKey", async () => {
+    let errorCallback: ((msg: ChatMessageDTO) => void) | undefined;
+    mocks.subscribe.mockImplementation((dest: string, cb: (msg: ChatMessageDTO) => void) => {
+      if (dest === "/user/queue/errors") errorCallback = cb;
+      return () => {};
+    });
+
+    render(<Harness streamKey="stream-1" />);
+    await waitFor(() => expect(errorCallback).toBeDefined());
+
+    act(() => {
+      api.sendMessage("pending A");
+      api.sendMessage("pending B");
+    });
+    expect(api.messages).toHaveLength(2);
+    const [keyA, keyB] = api.messages.map((m) => m.idempotencyKey as string);
+
+    act(() => {
+      errorCallback?.({
+        ...message(0, "Slow mode is enabled"),
+        messageType: "ERROR",
+        idempotencyKey: keyA,
+      });
+    });
+
+    expect(api.messages.map((m) => m.idempotencyKey)).toEqual([keyB]);
+    expect(toastMocks.error).toHaveBeenCalled();
   });
 });

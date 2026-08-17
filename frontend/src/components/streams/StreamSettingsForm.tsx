@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useState, type InputHTMLAttributes } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -35,9 +35,12 @@ const StreamSettingsForm = ({ streamKey }: Props) => {
     enabled: Boolean(streamKey),
   });
 
-  const { register, handleSubmit, reset, formState: { isSubmitting, isDirty } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(settingsSchema),
   });
+
+  const slowModeEnabled = watch('slowModeEnabled');
+  const followersOnlyMode = watch('followersOnlyMode');
 
   useEffect(() => {
     if (settings) {
@@ -101,10 +104,11 @@ const StreamSettingsForm = ({ streamKey }: Props) => {
             {...register('slowModeEnabled')}
           />
 
-          {settings?.slowModeEnabled && (
+          {slowModeEnabled && (
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-900 dark:text-slate-200">Slow mode (seconds)</label>
+              <label htmlFor="slowModeSeconds" className="text-sm font-medium text-gray-900 dark:text-slate-200">Slow mode (seconds)</label>
               <input
+                id="slowModeSeconds"
                 type="number"
                 min={0}
                 max={3600}
@@ -119,6 +123,20 @@ const StreamSettingsForm = ({ streamKey }: Props) => {
             description="Followers-only chat"
             {...register('followersOnlyMode')}
           />
+
+          {followersOnlyMode && (
+            <div className="flex flex-col gap-1">
+              <label htmlFor="followersOnlyDurationMinutes" className="text-sm font-medium text-gray-900 dark:text-slate-200">Followers-only duration (minutes)</label>
+              <input
+                id="followersOnlyDurationMinutes"
+                type="number"
+                min={0}
+                max={43200}
+                className="rounded-lg border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                {...register('followersOnlyDurationMinutes', { valueAsNumber: true })}
+              />
+            </div>
+          )}
 
           <ToggleSwitch
             label="Subscribers Only"
@@ -145,8 +163,9 @@ const StreamSettingsForm = ({ streamKey }: Props) => {
           />
 
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-900 dark:text-slate-200">Max message length</label>
+            <label htmlFor="maxMessageLength" className="text-sm font-medium text-gray-900 dark:text-slate-200">Max message length</label>
             <input
+              id="maxMessageLength"
               type="number"
               min={1}
               max={2000}
@@ -168,21 +187,24 @@ const StreamSettingsForm = ({ streamKey }: Props) => {
   );
 };
 
-function ToggleSwitch({ label, description, ...props }:
-  { label: string; description?: string; checked?: boolean; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
-  return (
-    <label className="flex items-center justify-between">
-      <div className="flex flex-col">
-        <span className="text-sm font-medium text-gray-900 dark:text-slate-200">{label}</span>
-        {description && <span className="text-xs text-gray-500 dark:text-slate-400">{description}</span>}
-      </div>
-      <input
-        type="checkbox"
-        className="h-5 w-5 cursor-pointer rounded border-gray-300 dark:border-slate-600 text-sky-500"
-        {...props}
-      />
-    </label>
-  );
-}
+const ToggleSwitch = forwardRef<
+  HTMLInputElement,
+  { label: string; description?: string } & InputHTMLAttributes<HTMLInputElement>
+>(({ label, description, ...props }, ref) => (
+  <label className="flex items-center justify-between">
+    <div className="flex flex-col">
+      <span className="text-sm font-medium text-gray-900 dark:text-slate-200">{label}</span>
+      {description && <span className="text-xs text-gray-500 dark:text-slate-400">{description}</span>}
+    </div>
+    <input
+      type="checkbox"
+      ref={ref}
+      className="h-5 w-5 cursor-pointer rounded border-gray-300 dark:border-slate-600 text-sky-500"
+      {...props}
+    />
+  </label>
+));
+
+ToggleSwitch.displayName = 'ToggleSwitch';
 
 export default StreamSettingsForm;

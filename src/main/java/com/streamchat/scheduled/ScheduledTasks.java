@@ -95,19 +95,4 @@ public class ScheduledTasks {
         auditLogRepository.deleteByCreatedAtBefore(cutoff);
         log.info("Audit cleanup: deleted audit logs older than {} days", auditRetentionDays);
     }
-
-    /**
-     * Recalculate user reputation scores.
-     * Runs daily at 2 AM.
-     */
-    @Scheduled(cron = "0 0 2 * * *") // Daily at 2:00 AM
-    @Transactional
-    public void recalculateUserReputation() {
-        // In production, this would recalculate reputation based on:
-        // - Message count
-        // - Ban/timeout history
-        // - Moderation actions against them
-        // - Time since registration
-        log.debug("User reputation recalculation completed");
-    }
 }

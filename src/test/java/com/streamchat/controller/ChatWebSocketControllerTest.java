@@ -59,7 +59,7 @@ class ChatWebSocketControllerTest {
     @Test
     void sendMessage_failure_notifiesSenderOnErrorsQueue() {
         when(principal.getName()).thenReturn("alice");
-        ChatMessageDTO dto = ChatMessageDTO.builder().content("hello").build();
+        ChatMessageDTO dto = ChatMessageDTO.builder().content("hello").idempotencyKey("k9").build();
         when(chatService.sendMessage(any(), any(), any(), any(), any(), any()))
                 .thenThrow(new IllegalArgumentException("bad content"));
 
@@ -69,5 +69,7 @@ class ChatWebSocketControllerTest {
         verify(messagingTemplate).convertAndSendToUser(eq("alice"), eq("/queue/errors"), captor.capture());
         assertEquals(MessageType.ERROR, captor.getValue().getMessageType());
         assertEquals("bad content", captor.getValue().getContent());
+        assertEquals("k9", captor.getValue().getIdempotencyKey(),
+                "error frame must echo the idempotencyKey so the client can discard its optimistic message");
     }
 }

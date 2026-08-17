@@ -1,7 +1,9 @@
 package com.streamchat.integration;
 
 import com.streamchat.model.dto.ChatMessageDTO;
+import com.streamchat.model.entity.StreamSettings;
 import com.streamchat.model.entity.User;
+import com.streamchat.model.enums.MessageType;
 import com.streamchat.repository.ChatMessageRepository;
 import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.StreamSettingsRepository;
@@ -22,6 +24,8 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import java.lang.reflect.Type;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -29,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -112,6 +117,10 @@ abstract class ChatWebSocketE2EBaseTest {
         assertEquals("Hello e2e", senderGot.getContent());
         assertEquals("Hello e2e", secondGot.getContent());
         assertNotNull(senderGot.getId(), "broadcast must carry the persisted message id");
+        assertNotNull(senderGot.getTimestamp(), "broadcast must carry a timestamp");
+        Duration skew = Duration.between(senderGot.getTimestamp(), OffsetDateTime.now()).abs();
+        assertTrue(skew.toMinutes() < 5,
+                "broadcast timestamp must be an absolute instant near now, skew=" + skew);
 
         long persisted = chatMessageRepository.findAll().stream()
                 .filter(m -> idempotencyKey.equals(m.getIdempotencyKey()))
@@ -122,7 +131,7 @@ abstract class ChatWebSocketE2EBaseTest {
         second.disconnect();
     }
 
-    @Test
+@Test
     void joinEvent_isBroadcastToSubscribers() throws Exception {
         StompSession listener = connect();
 
@@ -140,7 +149,58 @@ abstract class ChatWebSocketE2EBaseTest {
         listener.disconnect();
     }
 
+    @Test
+    void slowMode_rejectsRapidSecondMessageFromViewer() throws Exception {
+        userRepository.save(User.builder()
+                .username("viewer")
+                .email("viewer@example.com")
+                .passwordHash("password123")
+                .build());
+
+        long streamId = streamRepository.findByStreamKey(streamKey).orElseThrow().getId();
+        StreamSettings settings = streamSettingsRepository.findByStreamId(streamId)
+                .orElseThrow(() -> new IllegalStateException("settings row must exist after stream creation"));
+        settings.setSlowModeEnabled(true);
+        settings.setSlowModeSeconds(10);
+        streamSettingsRepository.save(settings);
+
+        StompSession viewer = connectWithToken(tokenProvider.generateToken("viewer"));
+
+        BlockingQueue<ChatMessageDTO> inbox = new LinkedBlockingQueue<>();
+        BlockingQueue<ChatMessageDTO> errors = new LinkedBlockingQueue<>();
+        viewer.subscribe("/topic/stream/" + streamKey, frameHandler(inbox));
+        viewer.subscribe("/user/queue/errors", frameHandler(errors));
+
+        viewer.send("/app/chat.send/" + streamKey,
+                Map.of("content", "one", "idempotencyKey", "slow-1"));
+        assertNotNull(inbox.poll(10, TimeUnit.SECONDS), "first message must be accepted and broadcast");
+
+        viewer.send("/app/chat.send/" + streamKey,
+                Map.of("content", "two", "idempotencyKey", "slow-2"));
+
+        ChatMessageDTO error = errors.poll(10, TimeUnit.SECONDS);
+        assertNotNull(error, "rapid second message must be rejected with an error on the sender queue");
+        assertEquals(MessageType.ERROR, error.getMessageType());
+        assertTrue(error.getContent().contains("Slow mode"));
+        assertEquals("slow-2", error.getIdempotencyKey(),
+                "error frame must echo the idempotencyKey of the rejected message");
+
+        ChatMessageDTO stray = inbox.poll(2, TimeUnit.SECONDS);
+        assertNull(stray, "rejected message must not be broadcast to subscribers");
+
+        long persisted = chatMessageRepository.findAll().stream()
+                .filter(m -> "slow-1".equals(m.getIdempotencyKey()) || "slow-2".equals(m.getIdempotencyKey()))
+                .count();
+        assertEquals(1L, persisted, "rejected message must not be persisted");
+
+        viewer.disconnect();
+    }
+
     protected StompSession connect() throws Exception {
+        return connectWithToken(token);
+    }
+
+    protected StompSession connectWithToken(String authToken) throws Exception {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
         MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
         converter.setObjectMapper(new com.fasterxml.jackson.databind.ObjectMapper()
@@ -149,8 +209,8 @@ abstract class ChatWebSocketE2EBaseTest {
         client.setMessageConverter(converter);
         client.setDefaultHeartbeat(new long[]{0, 0});
 
-        StompHeaders connectHeaders = new StompHeaders();
-        connectHeaders.set("Authorization", "Bearer " + token);
+StompHeaders connectHeaders = new StompHeaders();
+        connectHeaders.set("Authorization", "Bearer " + authToken);
 
         return client.connectAsync(
                         "ws://localhost:" + port + "/ws-chat/stream/" + streamKey,

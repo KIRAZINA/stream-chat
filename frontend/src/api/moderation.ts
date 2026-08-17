@@ -3,10 +3,7 @@ import {
   BanRequest,
   TimeoutRequest,
   PinMessageRequest,
-  AddModeratorRequest,
-  ModerationLog,
-  AuditLog,
-  UserStreamRole
+  AddModeratorRequest
 } from '../types/backend';
 
 // Helper to extract data from axios response
@@ -44,25 +41,11 @@ export const moderationApi = {
     extractData<{ message: string }>(api.post(`/streams/${streamKey}/moderate/pin`, data)),
 
   // Moderators
-  getModerators: (streamKey: string) =>
-    extractData<UserStreamRole[]>(api.get(`/streams/${streamKey}/moderate/moderators`)),
-
   addModerator: (streamKey: string, data: AddModeratorRequest) =>
     extractData<{ message: string }>(api.post(`/streams/${streamKey}/moderate/moderators`, data)),
 
   removeModerator: (streamKey: string, userId: number) =>
     extractData<{ message: string }>(api.delete(`/streams/${streamKey}/moderate/moderators/${userId}`)),
-
-  // Logs
-  getModerationLogs: (streamKey: string) =>
-    extractData<ModerationLog[]>(api.get(`/streams/${streamKey}/moderate/logs`)),
-
-  getAuditLogs: (streamKey: string) =>
-    extractData<AuditLog[]>(api.get(`/streams/${streamKey}/moderate/audit-logs`)),
-
-  // AutoMod
-  getTrustScore: (streamKey: string, userId: number) =>
-    extractData<Record<string, any>>(api.get(`/streams/${streamKey}/moderate/trust-score/${userId}`)),
 };
 
 // Export aliases for backward compatibility
@@ -70,4 +53,3 @@ export const banUser = moderationApi.banUser;
 export const deleteMessage = moderationApi.deleteMessage;
 export const timeoutUser = moderationApi.timeoutUser;
 export const pinMessage = moderationApi.pinMessage;
-export const getModerators = moderationApi.getModerators;

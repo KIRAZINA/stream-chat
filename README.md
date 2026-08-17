@@ -18,6 +18,27 @@ Similar to Twitch/YouTube Live chat with moderation, WebSocket support, and JWT 
 
 ## Version History
 
+### 2.7 — Stream Affinity, Observability, Wire Fixes & Char-Count Enforcement
+- **Stream-keyed WebSocket endpoint (A3)**: `stomp-client.ts` can connect to `/ws-chat/stream/{streamKey}`
+  (`VITE_USE_STREAM_AFFINITY=true`) so the stream key is carried in the path for consistent-hash
+  load balancing; `StreamAffinityHandshakeInterceptor` resolves it server-side. Default SockJS
+  `/ws-chat` path preserved when affinity is off.
+- **`replyToMessageId` wire field**: normalized to the camelCase name the frontend sends; the
+  STOMP reply path no longer drops the field on the wire.
+- **Local-first broadcast**: `chat.broadcast.local-first` delivers WS sends directly through the
+  in-memory broker when stream affinity pins the sender to the owner instance (`forceRedis` keeps
+  REST sends on the Redis fan-out path).
+- **Consistent-hash load balancing (A4)**: `deploy/stream-affinity-lb.md` documents the nginx +
+  Envoy routing + rollback for instance pinning.
+- **Broadcast observability (A5)**: `MetricsService` records local-delivery vs. orphaned broadcasts
+  (`chat.broadcast.local`, `chat.broadcast.orphaned`); Prometheus smoke test validates the gauges.
+- **Character-count enforcement (works)**: `maxMessageLength` is enforced server-side in
+  `ChatService.validateMessageContent` and surfaced live on the frontend `MessageInput` counter;
+  over-limit sends are rejected with `400 Bad Request`.
+- **Slow mode**: enforced in `ChatService.enforceSlowMode` via an atomic Lua GET+SET against Redis
+  (cross-instance) with an in-process Caffeine fallback. The fallback is what the integration tests
+  exercise; see *Current State Notes* below.
+
 ### 2.4 — Moderation Concurrency
 - `@Version` optimistic locking on `BannedUser` and `TimedOutUser`
 - Flyway V9 migration adding `version BIGINT` columns with backfill
@@ -27,8 +48,8 @@ Similar to Twitch/YouTube Live chat with moderation, WebSocket support, and JWT 
 - Role cache eviction (`streamAuthorizationService.evictRoleCache()`) fires after DB commit
 
 ### 2.5 — Gap Replay
-- `GET /api/streams/{id}/messages/replay?after={afterId}` — fetch missed messages on reconnect
-- Backend cursor pagination filters by `redisSequenceId > afterId`
+- `GET /api/streams/{streamKey}/messages/replay?afterSequenceId={id}&limit={n}` — fetch missed messages on reconnect
+- Backend cursor pagination; the replay endpoint reuses the history query (sequence-based trimming is best-effort for now)
 - Frontend tracks `lastSeenMessageId` and merges replayed messages via deduplication
 
 ### R5 — Chat Connection & Theme Fixes
@@ -61,6 +82,13 @@ Similar to Twitch/YouTube Live chat with moderation, WebSocket support, and JWT 
 - `UserBadgeRepository.findBadgeTypesByUserIdAndStreamIdOrGlobalIn()` — batched badge query
 - `UserStreamRoleRepository.findByUserIdAndStreamIdIn()` — batched roles query
 
+## Current State Notes
+
+- **Tests**: 315 total (295 backend + 20 frontend). 6 backend tests are Testcontainers-gated and skip when Docker is unavailable to the test runner (Redis Lua-script + multi-instance fan-out tests); all non-gated tests pass.
+- **Slow mode**: functional and integration-tested (a second rapid message is rejected with HTTP 429 / a STOMP error on `/user/queue/errors`). The backend enforces it via the in-process Caffeine store by default; the Redis-backed Lua path is configured (`chat.slowmode.storage`) but the `RedisConfig` bean is gated by a `@ConditionalOnProperty` tied to `spring.autoconfigure.exclude`, so the Redis template is not created when Redis auto-configuration is excluded — slow mode therefore falls back to the in-process store. Wire up Redis to get cross-instance enforcement.
+- **Char-count enforcement**: working — the server validates `maxMessageLength` and the frontend shows a live counter.
+- **Gap replay**: the `/messages/replay` endpoint exists and the frontend deduplicates backfill, but sequence-based trimming is best-effort (the endpoint currently reuses the history query).
+
 ## Quick Start
 
 ### Backend (Spring Boot)
@@ -69,7 +97,9 @@ Similar to Twitch/YouTube Live chat with moderation, WebSocket support, and JWT 
 mvn spring-boot:run
 ```
 
-Runs on `http://localhost:8080` with PostgreSQL and Redis (see Docker section below).
+Runs on `http://localhost:8080` with an H2 in-memory database and the in-process Caffeine
+store (Redis is excluded from the default `dev` profile — see Docker for the full PostgreSQL +
+Redis stack).
 
 ### Frontend (React + Vite)
 
@@ -177,32 +207,36 @@ API endpoints available on the backend:
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/streams/{streamKey}/messages` | Public | Paginated chat history (via `StreamController`) |
+| `GET` | `/api/streams/{streamKey}/messages/replay` | Auth | Missed messages for reconnect recovery (via `StreamController`) |
 | `POST` | `/api/streams/{streamKey}/messages` | Auth required | Send a chat message (via `ChatController`) |
 | `GET` | `/api/streams/{streamKey}/presence` | Public | Active viewer count |
+| `GET` | `/api/streams/{streamKey}/settings` | Auth | Stream chat settings (via `SettingsController`) |
+| `PUT` | `/api/streams/{streamKey}/settings` | Auth (owner) | Update chat settings (via `SettingsController`) |
+| `POST` | `/api/streams/{streamKey}/moderate/*` | Auth (moderator+) | Timeouts, bans, shadow-ban, pinning, logs (via `ModerationController`) |
 
 #### Full test suite
 
-With Docker running, all tests execute including the Testcontainers-gated integration tests:
+With Docker available, the Testcontainers-gated integration tests run too:
 
 ```bash
 mvn clean test          # backend — all tests
-cd frontend && npm test # frontend
+cd frontend && npm run test -- --run # frontend
 ```
 
-### 252 tests across unit, controller, and integration layers.
+**315 tests** (295 backend + 20 frontend); 6 backend tests are Testcontainers-gated and skip without Docker. All non-gated tests pass.
 
-### Testing
+#### Testing
 
-Backend tests with Maven:
+Run a subset of tests with Maven:
 
 ```bash
 mvn test
 ```
 
-Frontend tests:
+Frontend tests (non-watch mode):
 
 ```bash
-cd frontend && npm test
+cd frontend && npm run test -- --run
 ```
 
 ### License

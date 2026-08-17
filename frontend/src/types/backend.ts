@@ -4,11 +4,6 @@
  */
 
 // Auth types
-export interface AuthRequest {
-  username: string;
-  password: string;
-}
-
 export interface LoginRequest {
   username: string;
   password: string;
@@ -42,6 +37,7 @@ export interface UserProfileDTO {
   id: number;
   username: string;
   email: string;
+  color?: string;
   roles: string[];
   streamRoles: UserStreamRoleDTO[];
 }
@@ -154,13 +150,6 @@ export interface MessageFragmentDTO {
   imageUrl?: string;
 }
 
-export interface SendMessageCommand {
-  streamKey: string;
-  content: string;
-  replyToMessageId?: number;
-  idempotencyKey: string;
-}
-
 export interface ChatHistoryResponse {
   messages: ChatMessageDTO[];
   totalCount: number;
@@ -168,33 +157,6 @@ export interface ChatHistoryResponse {
 }
 
 // Moderation types
-export interface ModerationAction {
-  id: number;
-  streamId: number;
-  actionType: 'DELETE_MESSAGE' | 'PIN_MESSAGE' | 'TIMEOUT' | 'BAN' | 'UNBAN' | 'SHADOW_BAN';
-  moderatorId: number;
-  moderatorUsername: string;
-  targetUserId?: number;
-  targetUsername?: string;
-  messageId?: number;
-  reason?: string;
-  durationSeconds?: number;
-  permanent?: boolean;
-  createdAt: string;
-  pin?: boolean;
-}
-
-export interface ModerationCommand {
-  streamKey: string;
-  action: string;
-  messageId?: number;
-  username?: string;
-  durationSeconds?: number;
-  reason?: string;
-  permanent?: boolean;
-  pin?: boolean;
-}
-
 export interface TimeoutRequest {
   username: string;
   durationSeconds: number;
@@ -214,37 +176,4 @@ export interface PinMessageRequest {
 
 export interface AddModeratorRequest {
   username: string;
-}
-
-export interface ModerationLog {
-  id: number;
-  streamId: number;
-  moderatorId: number;
-  moderatorUsername: string;
-  action: string;
-  targetUsername?: string;
-  details?: string;
-  createdAt: string;
-}
-
-export interface AuditLog {
-  id: number;
-  streamId: number;
-  userId: number;
-  username: string;
-  action: string;
-  details?: string;
-  ipAddress?: string;
-  userAgent?: string;
-  createdAt: string;
-}
-
-// Stream events
-export interface StreamEvent {
-  eventType: 'USER_JOINED' | 'USER_LEFT' | 'STREAM_STARTED' | 'STREAM_STOPPED' | 'STREAM_UPDATED';
-  streamKey: string;
-  userId?: number;
-  username?: string;
-  timestamp: string;
-  details?: string;
 }

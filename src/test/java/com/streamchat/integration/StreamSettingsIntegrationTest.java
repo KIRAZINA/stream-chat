@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.streamchat.model.entity.User;
 import com.streamchat.model.entity.UserRole;
 import com.streamchat.model.enums.Role;
+import com.streamchat.repository.ChatMessageRepository;
 import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.StreamSettingsRepository;
 import com.streamchat.repository.UserRepository;
@@ -46,11 +47,15 @@ class StreamSettingsIntegrationTest {
     @Autowired
     private StreamSettingsRepository streamSettingsRepository;
 
-    @Autowired
+@Autowired
     private UserStreamRoleRepository userStreamRoleRepository;
+
+    @Autowired
+    private ChatMessageRepository chatMessageRepository;
 
     @BeforeEach
     void cleanup() {
+        chatMessageRepository.deleteAll();
         streamSettingsRepository.deleteAll();
         userStreamRoleRepository.deleteAll();
         streamRepository.deleteAll();
@@ -111,5 +116,182 @@ class StreamSettingsIntegrationTest {
         assertTrue(gotBody.contains("\"slowModeEnabled\":true"), () -> "Unexpected response body: " + gotBody);
         assertTrue(gotBody.contains("\"slowModeSeconds\":3"), () -> "Unexpected response body: " + gotBody);
         assertTrue(gotBody.contains("\"maxMessageLength\":250"), () -> "Unexpected response body: " + gotBody);
+    }
+
+    @Test
+    void saved_restrictions_are_enforced_for_non_privileged_users() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/register")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"broadcaster\",\"email\":\"broadcaster@example.com\",\"password\":\"password123\"}"))
+                .andExpect(status().isCreated());
+
+        User broadcaster = userRepository.findByUsername("broadcaster").orElseThrow();
+        userRoleRepository.save(UserRole.builder().user(broadcaster).role(Role.ROLE_BROADCASTER).build());
+
+        String token = loginAndExtractToken("broadcaster", "password123");
+
+        MvcResult created = mockMvc.perform(MockMvcRequestBuilders.post("/api/streams")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"My Stream\",\"description\":\"Hello\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String streamKey = created.getResponse().getContentAsString().split("\"streamKey\":\"")[1].split("\",\"")[0];
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/register")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"viewer\",\"email\":\"viewer@example.com\",\"password\":\"password123\"}"))
+                .andExpect(status().isCreated());
+
+        String viewerToken = loginAndExtractToken("viewer", "password123");
+
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/streams/" + streamKey + "/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"subscribersOnlyMode\":true}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/streams/" + streamKey + "/messages")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"hello from viewer\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/streams/" + streamKey + "/messages")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"hello from broadcaster\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void slow_mode_blocks_rapid_messages_from_viewer() throws Exception {
+        String streamKey = registerBroadcasterAndCreateStream("broadcaster", "broadcaster@example.com");
+        String token = loginAndExtractToken("broadcaster", "password123");
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/register")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"viewer\",\"email\":\"viewer@example.com\",\"password\":\"password123\"}"))
+                .andExpect(status().isCreated());
+
+        String viewerToken = loginAndExtractToken("viewer", "password123");
+
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/streams/" + streamKey + "/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"slowModeEnabled\":true,\"slowModeSeconds\":10}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/streams/" + streamKey + "/messages")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"first message\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/streams/" + streamKey + "/messages")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"second message too soon\"}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void max_message_length_blocks_long_messages_for_everyone() throws Exception {
+        String streamKey = registerBroadcasterAndCreateStream("broadcaster", "broadcaster@example.com");
+        String token = loginAndExtractToken("broadcaster", "password123");
+
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/streams/" + streamKey + "/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"maxMessageLength\":5}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/streams/" + streamKey + "/messages")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"hello world\"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/streams/" + streamKey + "/messages")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"hi\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void slow_mode_applies_to_the_broadcaster_too() throws Exception {
+        String streamKey = registerBroadcasterAndCreateStream("broadcaster", "broadcaster@example.com");
+        String token = loginAndExtractToken("broadcaster", "password123");
+
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/streams/" + streamKey + "/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"slowModeEnabled\":true,\"slowModeSeconds\":10}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/streams/" + streamKey + "/messages")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"first message\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/streams/" + streamKey + "/messages")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"second message too soon\"}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    private String registerBroadcasterAndCreateStream(String username, String email) throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/register")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + username + "\",\"email\":\"" + email + "\",\"password\":\"password123\"}"))
+                .andExpect(status().isCreated());
+
+        User u = userRepository.findByUsername(username).orElseThrow();
+        userRoleRepository.save(UserRole.builder().user(u).role(Role.ROLE_BROADCASTER).build());
+
+        String token = loginAndExtractToken(username, "password123");
+
+        MvcResult created = mockMvc.perform(MockMvcRequestBuilders.post("/api/streams")
+                        .header("Authorization", "Bearer " + token)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"My Stream\",\"description\":\"Hello\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(MockMvcResultMatchers.jsonPath("$.streamKey").exists())
+                .andReturn();
+
+        return created.getResponse().getContentAsString().split("\"streamKey\":\"")[1].split("\",\"")[0];
+    }
+
+    private String loginAndExtractToken(String username, String password) throws Exception {
+        MvcResult login = mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return login.getResponse().getContentAsString().split("\"token\":\"")[1].split("\",\"")[0];
     }
 }

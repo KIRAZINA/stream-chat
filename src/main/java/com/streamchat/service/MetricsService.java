@@ -8,9 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -37,7 +34,6 @@ public class MetricsService {
     private final Timer messageProcessingTimer;
 
     // Gauges for active users and streams
-    private final Map<String, AtomicInteger> activeUsersByStream = new ConcurrentHashMap<>();
     private final AtomicLong totalActiveUsers = new AtomicLong(0);
 
     public MetricsService(MeterRegistry meterRegistry) {
@@ -97,13 +93,6 @@ public class MetricsService {
 
         log.info("MetricsService initialized with Micrometer registry: {}",
                 meterRegistry.getClass().getSimpleName());
-    }
-
-    /**
-     * Record a successfully sent message.
-     */
-    public void recordMessageSent() {
-        messagesSentCounter.increment();
     }
 
     /**
@@ -185,54 +174,5 @@ public class MetricsService {
      */
     public void recordMessageProcessing(long durationMs) {
         messageProcessingTimer.record(Duration.ofMillis(durationMs));
-    }
-
-    /**
-     * Update active user count for a stream.
-     */
-    public void updateActiveUsers(String streamKey, int count) {
-        activeUsersByStream.computeIfAbsent(streamKey, k -> {
-            AtomicInteger gauge = new AtomicInteger(0);
-            Gauge.builder("chat.users.active.by.stream", gauge, AtomicInteger::get)
-                    .description("Active users in stream")
-                    .tag("stream", streamKey)
-                    .register(meterRegistry);
-            return gauge;
-        }).set(count);
-    }
-
-    /**
-     * Update total active users across all streams.
-     */
-    public void updateTotalActiveUsers(long count) {
-        totalActiveUsers.set(count);
-    }
-
-    /**
-     * Increment active user count.
-     */
-    public void incrementActiveUsers(String streamKey) {
-        activeUsersByStream.computeIfAbsent(streamKey, k -> {
-            AtomicInteger gauge = new AtomicInteger(0);
-            Gauge.builder("chat.users.active.by.stream", gauge, AtomicInteger::get)
-                    .description("Active users in stream")
-                    .tag("stream", streamKey)
-                    .register(meterRegistry);
-            return gauge;
-        }).incrementAndGet();
-        totalActiveUsers.incrementAndGet();
-    }
-
-    /**
-     * Decrement active user count.
-     */
-    public void decrementActiveUsers(String streamKey) {
-        AtomicInteger count = activeUsersByStream.get(streamKey);
-        if (count != null && count.get() > 0) {
-            count.decrementAndGet();
-        }
-        if (totalActiveUsers.get() > 0) {
-            totalActiveUsers.decrementAndGet();
-        }
     }
 }

@@ -4,12 +4,9 @@ import com.streamchat.model.entity.AuditLog;
 import com.streamchat.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -47,47 +44,5 @@ public class AuditService {
 
         auditLogRepository.save(auditLog);
         log.info("Audit log: actor={} action={} target={}", actorUsername, actionType, targetUsername);
-    }
-
-    /**
-     * Log a simple administrative action.
-     */
-    @Transactional
-    public void logAction(Long actorId, String actorUsername, String actionType, String details) {
-        logAction(actorId, actorUsername, null, null, null, actionType,
-                Map.of("details", details), null, null);
-    }
-
-    /**
-     * Get audit logs for a stream.
-     */
-    @Transactional(readOnly = true)
-    public Page<AuditLog> getAuditLogsForStream(Long streamId, Pageable pageable) {
-        return auditLogRepository.findByStreamId(streamId, pageable);
-    }
-
-    /**
-     * Get audit logs by actor.
-     */
-    @Transactional(readOnly = true)
-    public Page<AuditLog> getAuditLogsByActor(Long actorId, Pageable pageable) {
-        return auditLogRepository.findByActorId(actorId, pageable);
-    }
-
-    /**
-     * Get audit logs by action type.
-     */
-    @Transactional(readOnly = true)
-    public Page<AuditLog> getAuditLogsByActionType(String actionType, Pageable pageable) {
-        return auditLogRepository.findByActionType(actionType, pageable);
-    }
-
-    /**
-     * Clean up old audit logs.
-     */
-    @Transactional
-    public void cleanupOldAuditLogs(LocalDateTime cutoffDate) {
-        auditLogRepository.deleteByCreatedAtBefore(cutoffDate);
-        log.info("Cleaned up audit logs older than {}", cutoffDate);
     }
 }

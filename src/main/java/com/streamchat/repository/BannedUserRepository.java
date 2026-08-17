@@ -16,23 +16,6 @@ import java.util.Optional;
 public interface BannedUserRepository extends JpaRepository<BannedUser, Long> {
 
     /**
-     * Find ban record for user in stream.
-     *
-     * @param streamId the stream ID
-     * @param userId the user ID
-     * @return optional banned user
-     */
-    Optional<BannedUser> findByStreamIdAndUserId(Long streamId, Long userId);
-
-    /**
-     * Find all bans for a stream.
-     *
-     * @param streamId the stream ID
-     * @return list of bans
-     */
-    List<BannedUser> findByStreamId(Long streamId);
-
-    /**
      * Check if user is banned (active ban).
      *
      * @param streamId the stream ID

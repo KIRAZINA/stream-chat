@@ -37,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -249,7 +251,7 @@ public class ChatService {
             boolean privilegedUser = isPrivilegedUser(stream, user);
 
             enforceAccessModes(stream, user, content, privilegedUser);
-            enforceSlowMode(stream, user, privilegedUser);
+            enforceSlowMode(stream, user);
 
             // AutoMod analysis for non-privileged users
             if (!privilegedUser) {
@@ -589,8 +591,10 @@ public class ChatService {
         return token == null ? "" : token.replaceAll("^:+|:+$", "");
     }
 
-    private void enforceSlowMode(Stream stream, User user, boolean privilegedUser) {
-        if (privilegedUser || stream.getSettings() == null ||
+    private void enforceSlowMode(Stream stream, User user) {
+        // Slow mode applies to every sender (including the broadcaster/mods) so
+        // the configured rate is actually enforced for everyone who posts.
+        if (stream.getSettings() == null ||
                 !Boolean.TRUE.equals(stream.getSettings().getSlowModeEnabled())) {
             return;
         }
@@ -610,7 +614,7 @@ public class ChatService {
     }
 
     private long checkSlowMode(String key, long now, int slowModeSeconds) {
-        if ("memory".equalsIgnoreCase(slowModeStorage)) {
+        if ("memory".equalsIgnoreCase(slowModeStorage) || redisTemplate == null) {
             return checkSlowModeMemory(key, now, slowModeSeconds);
         }
         return checkSlowModeRedis(key, now, slowModeSeconds);
@@ -790,19 +794,29 @@ public class ChatService {
                 .isDeleted(Boolean.TRUE.equals(message.getIsDeleted()))
                 .deletedById(message.getDeletedBy() != null ? message.getDeletedBy().getId() : null)
                 .deletedByUsername(message.getDeletedBy() != null ? message.getDeletedBy().getUsername() : null)
-                .deletedAt(message.getDeletedAt())
+                .deletedAt(toOffset(message.getDeletedAt()))
                 .isPinned(Boolean.TRUE.equals(message.getIsPinned()))
-                .pinnedAt(message.getPinnedAt())
+                .pinnedAt(toOffset(message.getPinnedAt()))
                 .pinnedByUsername(message.getPinnedBy() != null ? message.getPinnedBy().getUsername() : null)
                 .idempotencyKey(message.getIdempotencyKey())
                 .redisSequenceId(message.getRedisSequenceId())
-                .timestamp(message.getCreatedAt());
+                .timestamp(toOffset(message.getCreatedAt()));
 
         if (message.getReplyToMessageId() != null) {
             applyReplyPreview(dtoBuilder, replyTargets.get(message.getReplyToMessageId()));
         }
 
         return dtoBuilder.build();
+    }
+
+    /**
+     * Attach the server's zone offset to a naive LocalDateTime so serialized
+     * timestamps carry an explicit offset. Without it, clients interpret the
+     * zone-less ISO string as their own local time and relative times skew by
+     * the server/client timezone difference.
+     */
+    private OffsetDateTime toOffset(LocalDateTime value) {
+        return value == null ? null : value.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 
     /**

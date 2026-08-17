@@ -76,6 +76,7 @@ public class ChatWebSocketController {
             ChatMessageDTO errorMessage = ChatMessageDTO.builder()
                     .messageType(MessageType.ERROR)
                     .content(e.getMessage())
+                    .idempotencyKey(payload.getIdempotencyKey())
                     .build();
 
             messagingTemplate.convertAndSendToUser(

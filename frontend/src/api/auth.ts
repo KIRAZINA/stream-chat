@@ -10,8 +10,3 @@ export const register = async (payload: RegisterRequest): Promise<AuthResponse> 
   const { data } = await api.post('/auth/register', payload);
   return data;
 };
-
-export const refreshToken = async (): Promise<AuthResponse> => {
-  const { data } = await api.post('/auth/refresh');
-  return data;
-};

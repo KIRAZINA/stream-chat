@@ -59,38 +59,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     List<ChatMessage> findByStreamIdAndUserId(Long streamId, Long userId);
 
     /**
-     * Find messages with redisSequenceId greater than a given value, ordered by id desc.
-     * Used for gap replay on reconnect.
-     */
-    List<ChatMessage> findByStreamIdAndRedisSequenceIdGreaterThanOrderByIdDesc(
-            Long streamId, Long redisSequenceId, Pageable pageable);
-
-    /**
      * Find message by idempotency key.
      */
     Optional<ChatMessage> findByIdempotencyKey(String idempotencyKey);
-
-    /**
-     * Count messages by user in a time window.
-     *
-     * @param streamId the stream ID
-     * @param userId the user ID
-     * @param after timestamp after which to count
-     * @return message count
-     */
-    @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.stream.id = :streamId " +
-            "AND m.user.id = :userId AND m.createdAt > :after")
-    long countByStreamIdAndUserIdAfter(@Param("streamId") Long streamId,
-                                       @Param("userId") Long userId,
-                                       @Param("after") LocalDateTime after);
-
-    /**
-     * Delete all messages by user in a stream.
-     *
-     * @param streamId the stream ID
-     * @param userId the user ID
-     */
-    void deleteByStreamIdAndUserId(Long streamId, Long userId);
 
     /**
      * Delete messages older than a given timestamp.
