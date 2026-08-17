@@ -157,7 +157,7 @@ export interface MessageFragmentDTO {
 export interface SendMessageCommand {
   streamKey: string;
   content: string;
-  replyTo?: number;
+  replyToMessageId?: number;
   idempotencyKey: string;
 }
 

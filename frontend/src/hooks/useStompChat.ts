@@ -5,7 +5,7 @@ import { StreamStompClient } from "../services/stomp-client";
 import { streamsApi } from "../api/streams";
 import { ChatMessageDTO } from "../types/backend";
 
-const getStompClient = (): StreamStompClient => {
+const getStompClient = (streamKey: string): StreamStompClient => {
   let wsUrl = import.meta.env.VITE_WS_URL;
   // Derive from window.location if not set, to allow development without .env
   if (!wsUrl) {
@@ -18,7 +18,7 @@ const getStompClient = (): StreamStompClient => {
   if (!wsUrl) {
     throw new Error("VITE_WS_URL environment variable is not defined and cannot be derived from window.location");
   }
-  return new StreamStompClient(wsUrl);
+  return new StreamStompClient(wsUrl, streamKey);
 };
 
 export function useStompChat(streamKey: string) {
@@ -45,7 +45,7 @@ export function useStompChat(streamKey: string) {
 
     const connectAndSubscribe = async (): Promise<void> => {
       try {
-        client = getStompClient();
+        client = getStompClient(streamKey);
         stompClientRef.current = client;
         client.setAuthToken(token);
         setConnectionState("connecting");
@@ -145,7 +145,7 @@ export function useStompChat(streamKey: string) {
         stompClient.publish(`/app/chat.send/${streamKey}`, {
           streamKey,
           content,
-          replyTo,
+          ...(replyTo !== undefined ? { replyToMessageId: replyTo } : {}),
           idempotencyKey: optimistic.idempotencyKey,
         });
       } catch (err) {
