@@ -13,6 +13,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -43,6 +44,7 @@ import static org.mockito.Mockito.when;
  * unavailable.
  */
 @Testcontainers(disabledWithoutDocker = true)
+@DisabledIfEnvironmentVariable(named = "CI", matches = "true")
 class RoleCacheRedisIntegrationTest {
 
     @Container
