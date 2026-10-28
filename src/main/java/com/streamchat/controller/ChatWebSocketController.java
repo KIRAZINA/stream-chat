@@ -1,15 +1,21 @@
 package com.streamchat.controller;
 
+import com.streamchat.exception.ErrorResponse;
+import com.streamchat.exception.RateLimitException;
+import com.streamchat.exception.ResourceNotFoundException;
+import com.streamchat.exception.UnauthorizedException;
 import com.streamchat.model.dto.ChatMessageDTO;
 import com.streamchat.model.enums.MessageType;
 import com.streamchat.service.ChatService;
 import com.streamchat.service.MessageBroadcastService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
@@ -51,8 +57,28 @@ public class ChatWebSocketController {
             @Payload ChatMessageDTO payload,
             Principal principal) {
 
+        String path = "/app/chat.send/" + streamKey;
+        String idempotencyKey = payload != null ? payload.getIdempotencyKey() : null;
+
         if (principal == null) {
             log.warn("Unauthenticated message attempt for stream {}", streamKey);
+            sendError(null, ErrorResponse.of(
+                    HttpStatus.UNAUTHORIZED.value(),
+                    "Unauthorized",
+                    "Authentication required",
+                    path,
+                    idempotencyKey));
+            return;
+        }
+
+        if (payload == null) {
+            log.warn("Empty message payload for stream {} from {}", streamKey, principal.getName());
+            sendError(principal, ErrorResponse.of(
+                    HttpStatus.BAD_REQUEST.value(),
+                    "Bad Request",
+                    "Message payload is required",
+                    path,
+                    null));
             return;
         }
 
@@ -72,18 +98,60 @@ public class ChatWebSocketController {
 
         } catch (Exception e) {
             log.error("Error sending message: {}", e.getMessage(), e);
+            sendError(principal, toErrorResponse(e, path, idempotencyKey));
+        }
+    }
 
-            ChatMessageDTO errorMessage = ChatMessageDTO.builder()
-                    .messageType(MessageType.ERROR)
-                    .content(e.getMessage())
-                    .idempotencyKey(payload.getIdempotencyKey())
-                    .build();
+    /**
+     * Map a chat-processing exception onto the same status/error vocabulary the
+     * REST layer uses, so clients can handle both transports uniformly.
+     */
+    static ErrorResponse toErrorResponse(Exception exception, String path, String idempotencyKey) {
+        HttpStatus status;
+        String error;
+        String message;
 
-            messagingTemplate.convertAndSendToUser(
-                    principal.getName(),
-                    "/queue/errors",
-                    errorMessage
-            );
+        if (exception instanceof RateLimitException) {
+            status = HttpStatus.TOO_MANY_REQUESTS;
+            error = "Rate Limit Exceeded";
+            message = messageOrDefault(exception, "Rate limit exceeded");
+        } else if (exception instanceof UnauthorizedException
+                || exception instanceof AuthenticationException) {
+            status = HttpStatus.UNAUTHORIZED;
+            error = "Unauthorized";
+            message = messageOrDefault(exception, "Authentication required");
+        } else if (exception instanceof ResourceNotFoundException) {
+            status = HttpStatus.NOT_FOUND;
+            error = "Not Found";
+            message = messageOrDefault(exception, "Resource not found");
+        } else if (exception instanceof IllegalArgumentException) {
+            status = HttpStatus.BAD_REQUEST;
+            error = "Bad Request";
+            message = messageOrDefault(exception, "Invalid request");
+        } else {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+            error = "Internal Server Error";
+            message = "An unexpected error occurred";
+        }
+
+        return ErrorResponse.of(status.value(), error, message, path, idempotencyKey);
+    }
+
+    private static String messageOrDefault(Exception exception, String fallback) {
+        String message = exception.getMessage();
+        return message == null || message.isBlank() ? fallback : message;
+    }
+
+    /**
+     * Deliver an error frame to the sender's private queue. When there is no
+     * authenticated principal (normally rejected during the handshake) the
+     * user-destination path is used so the frame is still observable.
+     */
+    private void sendError(Principal principal, ErrorResponse error) {
+        if (principal != null) {
+            messagingTemplate.convertAndSendToUser(principal.getName(), "/queue/errors", error);
+        } else {
+            messagingTemplate.convertAndSend("/user/queue/errors", error);
         }
     }
 

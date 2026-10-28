@@ -1,9 +1,9 @@
 package com.streamchat.integration;
 
+import com.streamchat.exception.ErrorResponse;
 import com.streamchat.model.dto.ChatMessageDTO;
 import com.streamchat.model.entity.StreamSettings;
 import com.streamchat.model.entity.User;
-import com.streamchat.model.enums.MessageType;
 import com.streamchat.repository.ChatMessageRepository;
 import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.StreamSettingsRepository;
@@ -96,10 +96,10 @@ abstract class ChatWebSocketE2EBaseTest {
 
         BlockingQueue<ChatMessageDTO> senderInbox = new LinkedBlockingQueue<>();
         BlockingQueue<ChatMessageDTO> secondInbox = new LinkedBlockingQueue<>();
-        BlockingQueue<ChatMessageDTO> senderErrors = new LinkedBlockingQueue<>();
+        BlockingQueue<ErrorResponse> senderErrors = new LinkedBlockingQueue<>();
         sender.subscribe("/topic/stream/" + streamKey, frameHandler(senderInbox));
         second.subscribe("/topic/stream/" + streamKey, frameHandler(secondInbox));
-        sender.subscribe("/user/queue/errors", frameHandler(senderErrors));
+        sender.subscribe("/user/queue/errors", errorFrameHandler(senderErrors));
 
         String idempotencyKey = "e2e-" + System.nanoTime();
         sender.send("/app/chat.send/" + streamKey,
@@ -108,9 +108,9 @@ abstract class ChatWebSocketE2EBaseTest {
         ChatMessageDTO senderGot = senderInbox.poll(10, TimeUnit.SECONDS);
         ChatMessageDTO secondGot = secondInbox.poll(10, TimeUnit.SECONDS);
 
-        ChatMessageDTO error = senderErrors.poll(2, TimeUnit.SECONDS);
+        ErrorResponse error = senderErrors.poll(2, TimeUnit.SECONDS);
         if (error != null) {
-            throw new AssertionError("send failed: " + error.getContent());
+            throw new AssertionError("send failed: " + error.getMessage());
         }
         assertNotNull(senderGot, "sender must receive its own broadcast");
         assertNotNull(secondGot, "a second subscriber must receive the broadcast");
@@ -167,9 +167,9 @@ abstract class ChatWebSocketE2EBaseTest {
         StompSession viewer = connectWithToken(tokenProvider.generateToken("viewer"));
 
         BlockingQueue<ChatMessageDTO> inbox = new LinkedBlockingQueue<>();
-        BlockingQueue<ChatMessageDTO> errors = new LinkedBlockingQueue<>();
+        BlockingQueue<ErrorResponse> errors = new LinkedBlockingQueue<>();
         viewer.subscribe("/topic/stream/" + streamKey, frameHandler(inbox));
-        viewer.subscribe("/user/queue/errors", frameHandler(errors));
+        viewer.subscribe("/user/queue/errors", errorFrameHandler(errors));
 
         viewer.send("/app/chat.send/" + streamKey,
                 Map.of("content", "one", "idempotencyKey", "slow-1"));
@@ -178,10 +178,12 @@ abstract class ChatWebSocketE2EBaseTest {
         viewer.send("/app/chat.send/" + streamKey,
                 Map.of("content", "two", "idempotencyKey", "slow-2"));
 
-        ChatMessageDTO error = errors.poll(10, TimeUnit.SECONDS);
+        ErrorResponse error = errors.poll(10, TimeUnit.SECONDS);
         assertNotNull(error, "rapid second message must be rejected with an error on the sender queue");
-        assertEquals(MessageType.ERROR, error.getMessageType());
-        assertTrue(error.getContent().contains("Slow mode"));
+        assertEquals(429, error.getStatus());
+        assertEquals("Rate Limit Exceeded", error.getError());
+        assertTrue(error.getMessage().contains("Slow mode"));
+        assertEquals("/app/chat.send/" + streamKey, error.getPath());
         assertEquals("slow-2", error.getIdempotencyKey(),
                 "error frame must echo the idempotencyKey of the rejected message");
 
@@ -230,6 +232,20 @@ private static StompFrameHandler frameHandler(BlockingQueue<ChatMessageDTO> inbo
             @Override
             public void handleFrame(StompHeaders headers, Object payload) {
                 inbox.offer((ChatMessageDTO) payload);
+            }
+        };
+    }
+
+    private static StompFrameHandler errorFrameHandler(BlockingQueue<ErrorResponse> inbox) {
+        return new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return ErrorResponse.class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                inbox.offer((ErrorResponse) payload);
             }
         };
     }
