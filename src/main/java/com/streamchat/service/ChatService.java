@@ -80,6 +80,7 @@ public class ChatService {
     private final MetricsService metricsService;
     private final AutoModService autoModService;
     private final ChatMessagePersister chatMessagePersister;
+    private final StreamAnalyticsService streamAnalyticsService;
 
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
@@ -194,7 +195,8 @@ public class ChatService {
                        MetricsService metricsService,
                        AutoModService autoModService,
                        ChatMessagePersister chatMessagePersister,
-                       CacheProperties cacheProperties) {
+                       CacheProperties cacheProperties,
+                       StreamAnalyticsService streamAnalyticsService) {
         this.chatMessageRepository = chatMessageRepository;
         this.streamRepository = streamRepository;
         this.userRepository = userRepository;
@@ -208,6 +210,7 @@ public class ChatService {
         this.metricsService = metricsService;
         this.autoModService = autoModService;
         this.chatMessagePersister = chatMessagePersister;
+        this.streamAnalyticsService = streamAnalyticsService;
 
         this.userBadgeCache = buildCache(cacheProperties.getUserBadges());
         this.emoteFragmentCache = buildCache(cacheProperties.getEmoteFragments());
@@ -375,6 +378,24 @@ public class ChatService {
             }
 
             metricsService.recordMessageSent(streamKey, messageType.name());
+
+            // Async analytics (fail-safe)
+            try {
+                java.util.List<String> emoteCodes = new java.util.ArrayList<>();
+                java.util.Map<String, com.streamchat.model.entity.Emote> emoteMap =
+                        emoteService.getStreamEmotes(stream.getId()).stream()
+                                .collect(java.util.stream.Collectors.toMap(
+                                        com.streamchat.model.entity.Emote::getCode,
+                                        e -> e, (a, b) -> a));
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile(":([A-Za-z0-9_]+):").matcher(content);
+                while (m.find()) {
+                    String code = m.group(1);
+                    if (emoteMap.containsKey(code)) emoteCodes.add(code);
+                }
+                streamAnalyticsService.recordMessage(streamKey, username, emoteCodes, 0.0);
+            } catch (Exception e) {
+                log.debug("Analytics recording failed: {}", e.getMessage());
+            }
 
             return convertToDTO(saved);
         } finally {

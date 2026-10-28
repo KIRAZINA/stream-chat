@@ -7,6 +7,7 @@ import com.streamchat.model.entity.*;
 import com.streamchat.model.enums.MessageType;
 import com.streamchat.repository.*;
 import com.streamchat.service.EmoteService;
+import com.streamchat.service.StreamAnalyticsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -87,6 +88,8 @@ class ChatServiceTest {
 
     @Spy
     private CacheProperties cacheProperties = new CacheProperties();
+    @Mock
+    private StreamAnalyticsService streamAnalyticsService;
 
     @InjectMocks
     private ChatService chatService;

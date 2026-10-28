@@ -95,7 +95,8 @@ class CachePropertiesTest {
                 mock(MetricsService.class),
                 mock(AutoModService.class),
                 mock(ChatMessagePersister.class),
-                properties);
+                properties,
+                mock(com.streamchat.service.StreamAnalyticsService.class));
 
         assertCacheSettings(ReflectionTestUtils.getField(chatService, "userBadgeCache"), 30, 11);
         assertCacheSettings(ReflectionTestUtils.getField(chatService, "emoteFragmentCache"), 45, 12);

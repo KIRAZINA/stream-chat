@@ -73,7 +73,7 @@ class ChatServiceLoadTest {
                 rateLimitService, moderationService, streamAuthorizationService,
                 userStreamRoleRepository, userBadgeRepository, emoteRepository,
                 emoteService, metricsService, autoModService, chatMessagePersister,
-                new CacheProperties());
+                new CacheProperties(), org.mockito.Mockito.mock(StreamAnalyticsService.class));
     }
 
     @Test
