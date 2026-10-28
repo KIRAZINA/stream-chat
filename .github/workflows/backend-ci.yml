@@ -4,16 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main, master, develop]
-    paths:
-      - 'src/**'
-      - 'pom.xml'
-      - '.github/workflows/backend-ci.yml'
   pull_request:
     branches: [main, master, develop]
-    paths:
-      - 'src/**'
-      - 'pom.xml'
-      - '.github/workflows/backend-ci.yml'
 
 jobs:
   build:
@@ -75,3 +67,4 @@ jobs:
         with:
           name: surefire-reports
           path: target/surefire-reports/
+
