@@ -57,6 +57,7 @@ jobs:
           SPRING_DATASOURCE_PASSWORD: testpassword
           SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
           SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+          SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 2
           SPRING_DATA_REDIS_HOST: localhost
           SPRING_DATA_REDIS_PORT: 6379
         run: mvn clean verify
