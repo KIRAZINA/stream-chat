@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Java 17+
-- Node.js 18+ (for frontend)
+- Node.js 20+ (for frontend)
 - Maven 3.8+
 - Docker & Docker Compose (optional, for production)
 
