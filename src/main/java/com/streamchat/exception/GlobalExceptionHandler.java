@@ -43,6 +43,7 @@ public class GlobalExceptionHandler {
                 .message("Validation failed")
                 .path(request.getRequestURI())
                 .errors(errors)
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 
@@ -62,6 +63,7 @@ public class GlobalExceptionHandler {
                 .error("Unauthorized")
                 .message("Authentication failed: " + ex.getMessage())
                 .path(request.getRequestURI())
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 
@@ -81,6 +83,7 @@ public class GlobalExceptionHandler {
                 .error("Forbidden")
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 
@@ -100,6 +103,7 @@ public class GlobalExceptionHandler {
                 .error("Rate Limit Exceeded")
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 
@@ -120,6 +124,7 @@ public class GlobalExceptionHandler {
                 .error("Not Found")
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 
@@ -139,6 +144,7 @@ public class GlobalExceptionHandler {
                 .error("Conflict")
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 
@@ -159,6 +165,7 @@ public class GlobalExceptionHandler {
                 .error("Bad Request")
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 
@@ -178,6 +185,7 @@ public class GlobalExceptionHandler {
                 .error("Internal Server Error")
                 .message("An error occurred: " + ex.getMessage())
                 .path(request.getRequestURI())
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 
@@ -197,6 +205,7 @@ public class GlobalExceptionHandler {
                 .error("Internal Server Error")
                 .message("An unexpected error occurred")
                 .path(request.getRequestURI())
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .timestamp(LocalDateTime.now())
                 .build();
 

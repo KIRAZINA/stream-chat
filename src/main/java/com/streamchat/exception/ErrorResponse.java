@@ -26,6 +26,7 @@ public class ErrorResponse {
     private String message;
     private String path;
     private String idempotencyKey;
+    private String traceId;
     private Map<String, String> errors;
     private LocalDateTime timestamp;
 
@@ -36,12 +37,27 @@ public class ErrorResponse {
      */
     public static ErrorResponse of(int status, String error, String message,
                                    String path, String idempotencyKey) {
+        return of(status, error, message, path, idempotencyKey, null);
+    }
+
+    /**
+     * Build a fully populated error response with the current timestamp and an
+     * explicit trace id. When {@code traceId} is null the value is resolved
+     * from the MDC (populated by Micrometer Tracing) so REST/WebSocket callers
+     * do not need to thread the tracer through every call site.
+     */
+    public static ErrorResponse of(int status, String error, String message,
+                                   String path, String idempotencyKey, String traceId) {
+        if (traceId == null || traceId.isBlank()) {
+            traceId = org.slf4j.MDC.get("traceId");
+        }
         return ErrorResponse.builder()
                 .status(status)
                 .error(error)
                 .message(message)
                 .path(path)
                 .idempotencyKey(idempotencyKey)
+                .traceId(traceId)
                 .timestamp(LocalDateTime.now())
                 .build();
     }

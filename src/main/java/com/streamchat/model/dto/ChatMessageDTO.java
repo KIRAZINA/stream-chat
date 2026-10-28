@@ -42,5 +42,9 @@ public class ChatMessageDTO {
     private String idempotencyKey;
     private Long redisSequenceId;
 
+    // Distributed tracing context propagated across async boundaries
+    private String traceId;
+    private String spanId;
+
     private OffsetDateTime timestamp;
 }

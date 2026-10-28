@@ -214,6 +214,25 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     enforceSubscriptionAccess(accessor);
                 }
 
+                // Propagate trace context from STOMP headers into MDC
+                String traceId = accessor.getFirstNativeHeader("traceId");
+                String spanId = accessor.getFirstNativeHeader("spanId");
+                String traceparent = accessor.getFirstNativeHeader("traceparent");
+                if (traceparent != null && (traceId == null || traceId.isBlank())) {
+                    // W3C traceparent: 00-<traceId>-<spanId>-<flags>
+                    String[] parts = traceparent.split("-");
+                    if (parts.length >= 3) {
+                        traceId = parts[1];
+                        spanId = parts[2];
+                    }
+                }
+                if (traceId != null && !traceId.isBlank()) {
+                    org.slf4j.MDC.put("traceId", traceId);
+                }
+                if (spanId != null && !spanId.isBlank()) {
+                    org.slf4j.MDC.put("spanId", spanId);
+                }
+
                 return message;
             }
 
