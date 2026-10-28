@@ -1,9 +1,10 @@
 # Stream Chat — Docker Compose
 #
-# LOCAL-DEV DEFAULTS: every variable below has a default so a plain
+# LOCAL-DEV DEFAULTS: most variables below have a default so a plain
 #   docker compose up --build -d
-# works with no manual setup (no openssl, no .env required). All defaults
-# here are DEV-ONLY (weak credentials, shared JWT secret). For anything
+# works with minimal setup. JWT_SECRET is the exception: it is mandatory and
+# has no insecure fallback (generate one, e.g. `openssl rand -base64 48`).
+# All other defaults here are DEV-ONLY (weak credentials). For anything
 # shared or deployed, set real values in your .env / CI secrets —
 # copy .env.example to .env and override them.
 #
@@ -28,14 +29,13 @@ services:
       SPRING_DATA_REDIS_HOST: ${REDIS_HOST:-redis}
       SPRING_DATA_REDIS_PORT: ${REDIS_PORT:-6379}
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
-      # DEV-ONLY default so `docker compose up` works without openssl. The app
-      # refuses to start with a secret shorter than 32 bytes. Override JWT_SECRET
-      # in .env for anything shared or deployed.
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-please-change-in-production-must-be-at-least-64-characters-long}
+      # JWT_SECRET is mandatory. Compose fails fast if it is unset or empty;
+      # the application also rejects known/insecure defaults in prod/docker.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to a strong, unique value (>= 32 bytes)}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-PT15M}
       JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-P30D}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
     depends_on:
       postgres:

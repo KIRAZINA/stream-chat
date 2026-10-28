@@ -20,7 +20,6 @@ import java.security.Principal;
 @RestController
 @RequestMapping("/api/streams")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "${app.cors.allowed-origins:*}")
 @Slf4j
 public class ChatController {
 

@@ -94,12 +94,13 @@ Similar to Twitch/YouTube Live chat with moderation, WebSocket support, and JWT 
 ### Backend (Spring Boot)
 
 ```bash
-mvn spring-boot:run
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 Runs on `http://localhost:8080` with an H2 in-memory database and the in-process Caffeine
-store (Redis is excluded from the default `dev` profile — see Docker for the full PostgreSQL +
-Redis stack).
+store (Redis is excluded from the `dev` profile — see Docker for the full PostgreSQL +
+Redis stack). The `dev` profile supplies a DEV-ONLY JWT fallback; any other profile
+requires an explicit `JWT_SECRET`.
 
 ### Frontend (React + Vite)
 
@@ -145,7 +146,7 @@ values, copy the example and edit:
    | `JWT_EXPIRATION` | No | Access-token lifetime in ms. Default `86400000`. |
    | `JWT_ACCESS_TOKEN_TTL` | No | Access-token TTL. Default `PT15M`. |
    | `JWT_REFRESH_TOKEN_TTL` | No | Refresh-token TTL. Default `P30D`. |
-   | `CORS_ALLOWED_ORIGINS` | No | Comma-separated browser origins allowed to call the API. Defaults to `http://localhost:3000,http://localhost:8080`. |
+   | `APP_CORS_ALLOWED_ORIGINS` | **Yes** (prod/docker) | Comma-separated browser origins allowed to call the API. Explicit origins only; wildcards are rejected. |
    | `SPRING_PROFILES_ACTIVE` | No | Spring profile. `prod` is the Docker default. |
    | `CHAT_RETENTION_DAYS` | No | Message retention window for cleanup. Default `90`. |
    | `AUTOMOD_*` | No | AutoMod thresholds (caps, spam, trust decay, shadow-ban). |

@@ -100,6 +100,6 @@ stream-chat/
 For production:
 - Change JWT_SECRET to a strong random string (64+ chars)
 - Set up PostgreSQL and Redis instead of using defaults
-- Configure CORS_ALLOWED_ORIGINS for your domain
+- Configure APP_CORS_ALLOWED_ORIGINS for your domain (explicit origins only; never `*`)
 - Use HTTPS for all connections
 - Enable SPRING_PROFILES_ACTIVE=prod in environment
