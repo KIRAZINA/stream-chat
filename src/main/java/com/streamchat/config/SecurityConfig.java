@@ -124,7 +124,7 @@ public class SecurityConfig {
                         .authenticated()
                         .requestMatchers("/api/streams/*/moderate/**")
                         .authenticated()
-                        .requestMatchers("/api/streams/*/analytics/**")
+                        .requestMatchers("/api/streams/*/aggregator/**")
                         .authenticated()
                         .requestMatchers("/api/streams/*/settings")
                         .authenticated()

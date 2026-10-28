@@ -1,6 +1,7 @@
 package com.streamchat.model.dto;
 
 import com.streamchat.model.dto.MessageFragmentDTO;
+import com.streamchat.aggregator.ExternalPlatform;
 import com.streamchat.model.enums.MessageType;
 import lombok.*;
 
@@ -45,6 +46,10 @@ public class ChatMessageDTO {
     // Distributed tracing context propagated across async boundaries
     private String traceId;
     private String spanId;
+
+    // Multi-platform aggregator metadata
+    private ExternalPlatform platform;
+    private String externalAvatarUrl;
 
     private OffsetDateTime timestamp;
 }
