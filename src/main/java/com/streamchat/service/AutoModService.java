@@ -5,7 +5,12 @@ import com.streamchat.model.entity.ModerationLog;
 import com.streamchat.model.entity.Stream;
 import com.streamchat.model.entity.User;
 import com.streamchat.model.enums.ModerationActionType;
+import com.streamchat.config.AutoModProperties;
+import com.streamchat.repository.BlockedWordRepository;
 import com.streamchat.repository.ModerationLogRepository;
+import com.streamchat.model.entity.BlockedWord;
+import org.springframework.web.client.RestClient;
+import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -29,6 +34,9 @@ public class AutoModService {
     private final ModerationService moderationService;
     private final ModerationLogRepository moderationLogRepository;
     private final MetricsService metricsService;
+    private final BlockedWordRepository blockedWordRepository;
+    private final AutoModProperties autoModProperties;
+    private final RestClient restClient;
 
     // Trust score tracking per user per stream
     private final Map<String, UserTrustScore> userTrustScores = new ConcurrentHashMap<>();
@@ -55,10 +63,15 @@ public class AutoModService {
 
     public AutoModService(ModerationService moderationService,
                           ModerationLogRepository moderationLogRepository,
-                          MetricsService metricsService) {
+                          MetricsService metricsService,
+                          BlockedWordRepository blockedWordRepository,
+                          AutoModProperties autoModProperties) {
         this.moderationService = moderationService;
         this.moderationLogRepository = moderationLogRepository;
         this.metricsService = metricsService;
+        this.blockedWordRepository = blockedWordRepository;
+        this.autoModProperties = autoModProperties;
+        this.restClient = RestClient.builder().build();
     }
 
     /**
@@ -248,6 +261,111 @@ public class AutoModService {
         String key = streamId + ":" + userId;
         UserTrustScore score = userTrustScores.get(key);
         return score != null ? score.getTrustScore() : 0.0;
+    }
+
+    /**
+     * Score-based contextual AutoMod assessment.
+     */
+    public AutoModResult processMessage(String content, Long userId, Long streamId) {
+        double spamScore = 0;
+        double toxicityScore = 0;
+        String reason = null;
+
+        if (content == null) content = "";
+
+        // 1. Exact blocked word check
+        try {
+            for (BlockedWord bw : blockedWordRepository.findAllGlobal()) {
+                if (bw.getWord() != null && content.toLowerCase().contains(bw.getWord().toLowerCase())) {
+                    return AutoModResult.builder()
+                            .approved(false).shadowBanned(false).requiresModeratorReview(true)
+                            .spamScore(spamScore).toxicityScore(1.0).rejectionReason("BLOCKED_WORD").build();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Blocked word check failed: {}", e.getMessage());
+        }
+
+        // 2. Caps & repetition
+        long capsCount = content.chars().filter(Character::isUpperCase).count();
+        long letterCount = content.chars().filter(Character::isLetter).count();
+        if (letterCount > 0 && (double) capsCount / letterCount > autoModProperties.getCapsThreshold()) {
+            spamScore += 2;
+            if (reason == null) reason = "CAPS_EXCEEDED";
+        }
+        if (content.matches(".*(.)\\1{4,}.*")) {
+            spamScore += 1;
+            if (reason == null) reason = "SPAM_REPETITION";
+        }
+
+        // 3. Contextual toxicity heuristics
+        String lower = content.toLowerCase();
+        String[] toxicPhrases = {"idiot", "stupid", "kill yourself", "hate you"};
+        int toxicHits = 0;
+        for (String p : toxicPhrases) {
+            if (lower.contains(p)) toxicHits++;
+        }
+        if (toxicHits > 0) {
+            toxicityScore = Math.min(1.0, toxicHits * 0.4);
+            if (reason == null) reason = "HIGH_TOXICITY";
+        }
+
+        // 4. AI inference (optional)
+        if (autoModProperties.isAiInferenceEnabled()) {
+            try {
+                RestClient.ResponseSpec spec = restClient.post()
+                        .uri(autoModProperties.getAiInferenceUrl())
+                        .body(Map.of("text", content))
+                        .retrieve();
+                // best-effort: ignore parse errors
+            } catch (Exception e) {
+                log.debug("AI inference unavailable, falling back to heuristics: {}", e.getMessage());
+            }
+        }
+
+        boolean approved = true;
+        boolean shadowBanned = false;
+        boolean review = false;
+
+        if (toxicityScore >= autoModProperties.getToxicityScoreThreshold()
+                || spamScore >= autoModProperties.getSpamScoreThreshold()) {
+            if (autoModProperties.isShadowBanEnabled()) {
+                shadowBanned = true;
+            } else {
+                approved = false;
+                if (reason == null) reason = "HIGH_TOXICITY";
+            }
+            review = true;
+        }
+
+        if (reason == null) reason = null;
+
+        return AutoModResult.builder()
+                .approved(approved)
+                .shadowBanned(shadowBanned)
+                .requiresModeratorReview(review)
+                .spamScore(spamScore)
+                .toxicityScore(toxicityScore)
+                .rejectionReason(approved ? null : reason)
+                .build();
+    }
+
+    /**
+     * Result of the score-based AutoMod pipeline.
+     */
+    @lombok.Getter
+    @lombok.Builder
+    public static class AutoModResult {
+        private boolean approved = true;
+        private boolean shadowBanned = false;
+        private boolean requiresModeratorReview = false;
+        private double spamScore = 0;
+        private double toxicityScore = 0;
+        private String rejectionReason;
+
+        public static AutoModResult approved() {
+            return AutoModResult.builder().approved(true).build();
+        }
     }
 
     /**

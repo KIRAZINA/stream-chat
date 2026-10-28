@@ -113,8 +113,8 @@ class ChatServiceTest {
         lenient().doNothing().when(metricsService).recordMessageRejected(anyString());
         lenient().doNothing().when(metricsService).recordRateLimitExceeded();
         lenient().doNothing().when(metricsService).recordBannedWordDetected();
-        lenient().when(autoModService.analyzeMessage(any(), any(), any()))
-                .thenReturn(AutoModService.ModerationResult.allowed());
+        lenient().when(autoModService.processMessage(any(), any(), any()))
+                .thenReturn(AutoModService.AutoModResult.approved());
 
         streamOwner = User.builder()
                 .id(99L)
@@ -255,7 +255,7 @@ class ChatServiceTest {
 
         chatService.sendMessage(streamKey, username, "<b>badword</b>", MessageType.CHAT);
 
-        verify(autoModService).analyzeMessage(eq(testStream), eq(testUser), eq("badword"));
+        verify(autoModService).processMessage(eq("badword"), eq(testUser.getId()), eq(testStream.getId()));
     }
 
     @Test
@@ -267,7 +267,7 @@ class ChatServiceTest {
         assertEquals("Message content is invalid or empty after sanitization.",
                 exception.getMessage());
         verify(rateLimitService, never()).allowMessage(anyLong(), anyLong());
-        verify(autoModService, never()).analyzeMessage(any(), any(), any());
+        verify(autoModService, never()).processMessage(any(), any(), any());
         verify(chatMessagePersister, never()).persist(any());
     }
 
@@ -627,8 +627,8 @@ class ChatServiceTest {
                 .thenReturn(false);
         when(rateLimitService.allowMessage(anyLong(), anyLong()))
                 .thenReturn(true);
-        lenient().when(autoModService.analyzeMessage(any(), any(), any()))
-                .thenReturn(AutoModService.ModerationResult.allowed());
+        lenient().when(autoModService.processMessage(any(), any(), any()))
+                .thenReturn(AutoModService.AutoModResult.approved());
         Exception exception = assertThrows(IllegalArgumentException.class, () ->
                 chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
 
@@ -943,7 +943,7 @@ class ChatServiceTest {
         assertEquals(1L, second.getId());
         verify(chatMessagePersister, times(1)).persist(any(ChatMessage.class));
         verify(rateLimitService, times(1)).allowMessage(anyLong(), anyLong());
-        verify(autoModService, times(1)).analyzeMessage(any(), any(), any());
+        verify(autoModService, times(1)).processMessage(any(), any(), any());
     }
 
     @Test
@@ -1051,7 +1051,7 @@ class ChatServiceTest {
         assertThrows(DataIntegrityViolationException.class, () ->
                 chatService.sendMessage(streamKey, username, "Hello", MessageType.CHAT, null, "key-fast-x"));
         verify(rateLimitService, never()).allowMessage(anyLong(), anyLong());
-        verify(autoModService, never()).analyzeMessage(any(), any(), any());
+        verify(autoModService, never()).processMessage(any(), any(), any());
     }
 
     @Test
@@ -1766,4 +1766,7 @@ class ChatServiceTest {
         verify(chatMessageRepository, never()).save(any());
     }
 }
+
+
+
 

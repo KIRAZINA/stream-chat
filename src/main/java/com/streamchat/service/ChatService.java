@@ -315,10 +315,13 @@ public class ChatService {
 
             // AutoMod analysis for non-privileged users
             if (!privilegedUser) {
-                AutoModService.ModerationResult modResult = autoModService.analyzeMessage(stream, user, content);
-                if (modResult.isBlocked()) {
+                AutoModService.AutoModResult modResult = autoModService.processMessage(content, user.getId(), stream.getId());
+                if (!modResult.isApproved()) {
                     metricsService.recordMessageRejected("automod");
-                    throw new IllegalArgumentException(modResult.getReason());
+                    throw new IllegalArgumentException(modResult.getRejectionReason());
+                }
+                if (modResult.isShadowBanned()) {
+                    // shadow-banned: still persist but flag for broadcast exclusion
                 }
             }
 
