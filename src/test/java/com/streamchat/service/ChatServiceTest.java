@@ -191,6 +191,93 @@ class ChatServiceTest {
     }
 
     @Test
+    void sendMessage_XssPayload_PersistsAndReturnsSanitizedContent() {
+        String streamKey = "test-stream";
+        String username = "testuser";
+        String maliciousContent = "<img src=x onerror=alert(1)>Hello :smile: 👋";
+
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenAnswer(invocation -> {
+                    ChatMessage message = invocation.getArgument(0);
+                    message.setId(1L);
+                    return message;
+                });
+
+        ChatMessageDTO result = chatService.sendMessage(
+                streamKey, username, maliciousContent, MessageType.CHAT);
+
+        ArgumentCaptor<ChatMessage> persisted = ArgumentCaptor.forClass(ChatMessage.class);
+        verify(chatMessagePersister).persist(persisted.capture());
+
+        assertEquals("Hello :smile: 👋", persisted.getValue().getContent());
+        assertEquals("Hello :smile: 👋", result.getContent());
+        verify(listOperations).leftPush(anyString(), argThat(dto ->
+                "Hello :smile: 👋".equals(((ChatMessageDTO) dto).getContent())));
+    }
+
+    @Test
+    void sendMessage_AutoModReceivesSanitizedContent() {
+        String streamKey = "test-stream";
+        String username = "testuser";
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenAnswer(invocation -> {
+                    ChatMessage message = invocation.getArgument(0);
+                    message.setId(1L);
+                    return message;
+                });
+
+        chatService.sendMessage(streamKey, username, "<b>badword</b>", MessageType.CHAT);
+
+        verify(autoModService).analyzeMessage(eq(testStream), eq(testUser), eq("badword"));
+    }
+
+    @Test
+    void sendMessage_HtmlOnlyContent_ThrowsSanitizationExceptionBeforeRateLimitOrPersistence() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                chatService.sendMessage("test-stream", "testuser",
+                        "<script>alert(1)</script>", MessageType.CHAT));
+
+        assertEquals("Message content is invalid or empty after sanitization.",
+                exception.getMessage());
+        verify(rateLimitService, never()).allowMessage(anyLong(), anyLong());
+        verify(autoModService, never()).analyzeMessage(any(), any(), any());
+        verify(chatMessagePersister, never()).persist(any());
+    }
+
+    @Test
+    void sendMessage_EntityEncodedHtmlOnlyContent_ThrowsSanitizationException() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                chatService.sendMessage("test-stream", "testuser",
+                        "&lt;script&gt;alert(1)&lt;/script&gt;", MessageType.CHAT));
+
+        assertEquals("Message content is invalid or empty after sanitization.",
+                exception.getMessage());
+        verify(chatMessagePersister, never()).persist(any());
+    }
+
+    @Test
     void sendMessage_UserBanned_ThrowsException() {
         String streamKey = "test-stream";
         String username = "testuser";

@@ -66,6 +66,20 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- HTML sanitization: strict tag-stripping policy for chat content -->
+        <dependency>
+            <groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
+            <artifactId>owasp-java-html-sanitizer</artifactId>
+            <version>20261011.1</version>
+        </dependency>
+
+        <!-- Entity decoding/unescaping for sanitized plain text -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.23.2</version>
+        </dependency>
+
         <!-- Micrometer for metrics -->
         <dependency>
             <groupId>io.micrometer</groupId>

@@ -80,6 +80,29 @@ class ChatControllerTest {
     }
 
     @Test
+    void sendMessage_XssPayload_BroadcastsSanitizedServiceResult() {
+        ChatController.SendMessageRequest request = new ChatController.SendMessageRequest();
+        request.setContent("<script>alert(1)</script>Hello :smile:");
+        request.setMessageType(MessageType.CHAT);
+
+        ChatMessageDTO sanitized = ChatMessageDTO.builder()
+                .id(2L)
+                .username("testuser")
+                .content("Hello :smile:")
+                .messageType(MessageType.CHAT)
+                .build();
+
+        when(chatService.sendMessage("stream-1", "testuser", request.getContent(),
+                MessageType.CHAT, null, null)).thenReturn(sanitized);
+
+        ChatMessageDTO result = chatController.sendMessage("stream-1", request, principal).getBody();
+
+        assertNotNull(result);
+        assertEquals("Hello :smile:", result.getContent());
+        verify(messageBroadcastService).broadcastMessage(eq("stream-1"), eq(sanitized), eq(true));
+    }
+
+    @Test
     void sendMessage_WithReplyAndIdempotencyKey_DelegatesCorrectly() {
         ChatController.SendMessageRequest request = new ChatController.SendMessageRequest();
         request.setContent("Reply message");

@@ -23,6 +23,7 @@ import com.streamchat.repository.StreamRepository;
 import com.streamchat.repository.UserBadgeRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
+import com.streamchat.security.HtmlSanitizerService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -76,6 +77,14 @@ public class ChatService {
 
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
+
+    /**
+     * Field injection with a default instance keeps the existing constructor
+     * signature stable for manual constructions (e.g. load tests) while Spring
+     * still supplies the managed bean.
+     */
+    @Autowired
+    private HtmlSanitizerService htmlSanitizerService = new HtmlSanitizerService();
 
     private final Cache<BadgeCacheKey, List<String>> userBadgeCache = Caffeine.newBuilder()
             .expireAfterWrite(5, TimeUnit.MINUTES)
@@ -216,6 +225,17 @@ public class ChatService {
         long startTime = System.currentTimeMillis();
 
         try {
+            // Sanitize before idempotency, rate limiting, AutoMod, moderation,
+            // persistence, and DTO/emote fragmentation so every downstream
+            // consumer only ever sees plain text.
+            String sanitizedContent = htmlSanitizerService.sanitize(content);
+            if (content != null && !content.isBlank()
+                    && (sanitizedContent == null || sanitizedContent.isBlank())) {
+                throw new IllegalArgumentException(
+                        "Message content is invalid or empty after sanitization.");
+            }
+            content = sanitizedContent;
+
             // Idempotent publishing: if idempotencyKey exists, return existing message.
             // The idempotency_key index is GLOBAL (V7), so a key must belong to the
             // requested stream; reuse on another stream is a client bug.
