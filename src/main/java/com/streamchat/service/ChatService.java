@@ -3,6 +3,7 @@ package com.streamchat.service;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
+import com.streamchat.config.CacheProperties;
 import com.streamchat.exception.RateLimitException;
 import com.streamchat.exception.UnauthorizedException;
 import com.streamchat.model.dto.ChatMessageDTO;
@@ -24,6 +25,7 @@ import com.streamchat.repository.UserBadgeRepository;
 import com.streamchat.repository.UserRepository;
 import com.streamchat.repository.UserStreamRoleRepository;
 import com.streamchat.security.HtmlSanitizerService;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,17 +39,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
@@ -86,20 +92,9 @@ public class ChatService {
     @Autowired
     private HtmlSanitizerService htmlSanitizerService = new HtmlSanitizerService();
 
-    private final Cache<BadgeCacheKey, List<String>> userBadgeCache = Caffeine.newBuilder()
-            .expireAfterWrite(5, TimeUnit.MINUTES)
-            .maximumSize(1000)
-            .build();
-
-    private final Cache<String, List<MessageFragmentDTO>> emoteFragmentCache = Caffeine.newBuilder()
-            .expireAfterWrite(5, TimeUnit.MINUTES)
-            .maximumSize(500)
-            .build();
-
-    private final Cache<String, Map<String, Emote>> streamEmoteCache = Caffeine.newBuilder()
-            .expireAfterWrite(5, TimeUnit.MINUTES)
-            .maximumSize(1000)
-            .build();
+    private final Cache<BadgeCacheKey, List<String>> userBadgeCache;
+    private final Cache<String, List<MessageFragmentDTO>> emoteFragmentCache;
+    private final Cache<String, Map<String, Emote>> streamEmoteCache;
 
     private static final String RECENT_MESSAGES_KEY = "recent:messages:";
     private static final int RECENT_MESSAGES_LIMIT = 100;
@@ -149,6 +144,15 @@ public class ChatService {
     @Value("${chat.slowmode.storage:redis}")
     private String slowModeStorage;
 
+    @Value("${spring.profiles.active:}")
+    private String activeProfiles;
+
+    /** Emit the fallback diagnostic (and metric) only once per process. */
+    private final AtomicBoolean slowModeFallbackLogged = new AtomicBoolean(false);
+
+    /** Warn only once if an unsupported storage value is configured. */
+    private final AtomicBoolean invalidSlowModeStorageLogged = new AtomicBoolean(false);
+
     /**
      * In-memory slow-mode store used only when chat.slowmode.storage=memory
      * (dev escape hatch). Redis remains the single source of truth in prod.
@@ -189,7 +193,8 @@ public class ChatService {
                        EmoteService emoteService,
                        MetricsService metricsService,
                        AutoModService autoModService,
-                       ChatMessagePersister chatMessagePersister) {
+                       ChatMessagePersister chatMessagePersister,
+                       CacheProperties cacheProperties) {
         this.chatMessageRepository = chatMessageRepository;
         this.streamRepository = streamRepository;
         this.userRepository = userRepository;
@@ -203,6 +208,41 @@ public class ChatService {
         this.metricsService = metricsService;
         this.autoModService = autoModService;
         this.chatMessagePersister = chatMessagePersister;
+
+        this.userBadgeCache = buildCache(cacheProperties.getUserBadges());
+        this.emoteFragmentCache = buildCache(cacheProperties.getEmoteFragments());
+        this.streamEmoteCache = buildCache(cacheProperties.getStreamEmotes());
+    }
+
+    /**
+     * Build a Caffeine cache from its externalized spec. Missing or invalid
+     * values fall back to the historical defaults so a bad config cannot
+     * disable caching or create an unbounded cache.
+     */
+    private static <K, V> Cache<K, V> buildCache(CacheProperties.CacheSpec spec) {
+        Duration ttl = spec != null && spec.getTtl() != null
+                ? spec.getTtl()
+                : Duration.ofMinutes(5);
+        long maxSize = spec != null && spec.getMaxSize() > 0
+                ? spec.getMaxSize()
+                : 1000L;
+
+        return Caffeine.newBuilder()
+                .expireAfterWrite(ttl)
+                .maximumSize(maxSize)
+                .build();
+    }
+
+    /**
+     * Fail-visible startup check: when Redis is configured as the slow-mode
+     * store but no RedisTemplate was contributed, warn immediately instead of
+     * discovering the silent local fallback on the first chat message.
+     */
+    @PostConstruct
+    void initializeSlowModeStorage() {
+        if ("redis".equals(normalizeSlowModeStorage()) && redisTemplate == null) {
+            handleSlowModeRedisUnavailable();
+        }
     }
 
     @Transactional
@@ -634,17 +674,73 @@ public class ChatService {
     }
 
     private long checkSlowMode(String key, long now, int slowModeSeconds) {
-        if ("memory".equalsIgnoreCase(slowModeStorage) || redisTemplate == null) {
-            return checkSlowModeMemory(key, now, slowModeSeconds);
+        String storage = normalizeSlowModeStorage();
+        if ("redis".equals(storage)) {
+            if (redisTemplate == null) {
+                handleSlowModeRedisUnavailable();
+                return checkSlowModeMemory(key, now, slowModeSeconds);
+            }
+            return checkSlowModeRedis(key, now, slowModeSeconds);
         }
-        return checkSlowModeRedis(key, now, slowModeSeconds);
+        return checkSlowModeMemory(key, now, slowModeSeconds);
+    }
+
+    /**
+     * Resolve {@code chat.slowmode.storage} to either {@code memory} or
+     * {@code redis}. Unsupported values are rejected loudly once and downgraded
+     * to the safe single-node store.
+     */
+    private String normalizeSlowModeStorage() {
+        String storage = slowModeStorage == null
+                ? ""
+                : slowModeStorage.trim().toLowerCase(Locale.ROOT);
+
+        if ("memory".equals(storage) || "redis".equals(storage)) {
+            return storage;
+        }
+
+        if (invalidSlowModeStorageLogged.compareAndSet(false, true)) {
+            log.warn("Invalid chat.slowmode.storage='{}'; expected 'memory' or 'redis'. "
+                    + "Falling back to the local memory store.", slowModeStorage);
+        }
+        return "memory";
+    }
+
+    /**
+     * Redis was requested for slow mode but no RedisTemplate is available.
+     * Dev degrades quietly; prod/docker get an explicit warning because the
+     * local store cannot synchronize rate limiting across instances.
+     */
+    private void handleSlowModeRedisUnavailable() {
+        if (!slowModeFallbackLogged.compareAndSet(false, true)) {
+            return;
+        }
+
+        metricsService.recordSlowModeRedisFallback();
+
+        if (isDevProfile()) {
+            log.info("Redis is unavailable for slow-mode in the dev profile; "
+                    + "falling back to the local memory store.");
+        } else {
+            log.warn("Redis is unavailable for slow-mode; falling back to local memory store. "
+                    + "Note: Multi-instance rate-limiting will not be synchronized.");
+        }
+    }
+
+    private boolean isDevProfile() {
+        if (activeProfiles == null || activeProfiles.isBlank()) {
+            return false;
+        }
+        return Arrays.stream(activeProfiles.split(","))
+                .map(String::trim)
+                .anyMatch("dev"::equalsIgnoreCase);
     }
 
     /**
      * Redis-backed slow mode enforcement: a single atomic Lua GET+SET with
-     * TTL = slowModeSeconds + 5. Cross-instance safe. Fails OPEN: on any
-     * Redis error the message is allowed and chat.slowmode.redis_fallback
-     * is incremented (slow mode is a QoL feature with no DB backing).
+     * TTL = slowModeSeconds + 5. Cross-instance safe. On a Redis error the
+     * check degrades to the local memory store (single-node only) and
+     * chat.slowmode.redis_fallback is incremented.
      */
     private long checkSlowModeRedis(String key, long now, int slowModeSeconds) {
         if (redisTemplate == null) {
@@ -662,8 +758,10 @@ public class ChatService {
             return waitMillis == null ? 0 : waitMillis;
         } catch (Exception e) {
             metricsService.recordSlowModeRedisFallback();
-            log.warn("Failed to enforce slow mode via Redis, allowing message: {}", e.getMessage());
-            return 0;
+            log.warn("Failed to enforce slow mode via Redis; falling back to local memory store. "
+                    + "Note: Multi-instance rate-limiting will not be synchronized. Cause: {}",
+                    e.getMessage());
+            return checkSlowModeMemory(key, now, slowModeSeconds);
         }
     }
 

@@ -146,6 +146,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Generates metadata for @ConfigurationProperties (app.cache.*) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

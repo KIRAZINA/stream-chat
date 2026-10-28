@@ -1,6 +1,7 @@
 package com.streamchat.service;
 
 import com.streamchat.exception.RateLimitException;
+import com.streamchat.config.CacheProperties;
 import com.streamchat.model.entity.Stream;
 import com.streamchat.model.entity.StreamSettings;
 import com.streamchat.model.entity.User;
@@ -71,7 +72,8 @@ class ChatServiceLoadTest {
                 chatMessageRepository, streamRepository, userRepository,
                 rateLimitService, moderationService, streamAuthorizationService,
                 userStreamRoleRepository, userBadgeRepository, emoteRepository,
-                emoteService, metricsService, autoModService, chatMessagePersister);
+                emoteService, metricsService, autoModService, chatMessagePersister,
+                new CacheProperties());
     }
 
     @Test

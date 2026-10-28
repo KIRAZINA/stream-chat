@@ -4,12 +4,15 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Service for implementing rate limiting to prevent spam.
@@ -21,6 +24,11 @@ public class RateLimitService {
 
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
+
+    @Value("${spring.profiles.active:}")
+    private String activeProfiles;
+
+    private final AtomicBoolean fallbackLogged = new AtomicBoolean(false);
 
     private static final int DEFAULT_MAX_MESSAGES = 20;
     private static final int DEFAULT_WINDOW_SECONDS = 60;
@@ -62,10 +70,39 @@ public class RateLimitService {
                 log.warn("Failed to check rate limit in Redis, falling back to in-memory: {}",
                         e.getMessage());
             }
+        } else {
+            logRedisUnavailableFallback();
         }
 
         // Fallback to in-memory
         return checkInMemoryRateLimit(key, maxMessages, windowSeconds);
+    }
+
+    /**
+     * Surface a missing RedisTemplate once. In dev the local store is expected;
+     * in prod/docker it means rate limits are per-instance only.
+     */
+    private void logRedisUnavailableFallback() {
+        if (!fallbackLogged.compareAndSet(false, true)) {
+            return;
+        }
+
+        if (isDevProfile()) {
+            log.info("Redis is unavailable for rate limiting in the dev profile; "
+                    + "using the in-memory store.");
+        } else {
+            log.warn("Redis is unavailable for rate limiting; falling back to the in-memory store. "
+                    + "Note: Multi-instance rate limiting will not be synchronized.");
+        }
+    }
+
+    private boolean isDevProfile() {
+        if (activeProfiles == null || activeProfiles.isBlank()) {
+            return false;
+        }
+        return Arrays.stream(activeProfiles.split(","))
+                .map(String::trim)
+                .anyMatch("dev"::equalsIgnoreCase);
     }
 
     /**

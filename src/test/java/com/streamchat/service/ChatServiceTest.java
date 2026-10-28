@@ -1,5 +1,6 @@
 package com.streamchat.service;
 
+import com.streamchat.config.CacheProperties;
 import com.streamchat.exception.RateLimitException;
 import com.streamchat.model.dto.ChatMessageDTO;
 import com.streamchat.model.entity.*;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -82,6 +84,9 @@ class ChatServiceTest {
 
     @Mock
     private ChatMessagePersister chatMessagePersister;
+
+    @Spy
+    private CacheProperties cacheProperties = new CacheProperties();
 
     @InjectMocks
     private ChatService chatService;
@@ -727,6 +732,45 @@ class ChatServiceTest {
 
         assertTrue(exception.getMessage().contains("Slow mode"));
         verify(metricsService, never()).recordSlowModeRedisFallback();
+    }
+
+    @Test
+    void sendMessage_SlowModeRedisConfiguredButMissing_FallsBackToMemoryAndBlocks() {
+        ReflectionTestUtils.setField(chatService, "redisTemplate", null);
+        ReflectionTestUtils.setField(chatService, "slowModeStorage", "redis");
+
+        String streamKey = "test-stream";
+        String username = "testuser";
+        String content = "Hello in slow mode";
+
+        testSettings.setSlowModeEnabled(true);
+        testSettings.setSlowModeSeconds(10);
+
+        when(streamRepository.findByStreamKey(streamKey))
+                .thenReturn(Optional.of(testStream));
+        when(userRepository.findByUsername(username))
+                .thenReturn(Optional.of(testUser));
+        when(moderationService.isUserBanned(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(moderationService.isUserTimedOut(anyLong(), anyLong()))
+                .thenReturn(false);
+        when(rateLimitService.allowMessage(anyLong(), anyLong()))
+                .thenReturn(true);
+        when(chatMessagePersister.persist(any(ChatMessage.class)))
+                .thenAnswer(invocation -> {
+                    ChatMessage message = invocation.getArgument(0);
+                    message.setId(1L);
+                    return message;
+                });
+
+        chatService.sendMessage(streamKey, username, content, MessageType.CHAT);
+
+        RateLimitException exception = assertThrows(RateLimitException.class, () ->
+                chatService.sendMessage(streamKey, username, content, MessageType.CHAT));
+
+        assertTrue(exception.getMessage().contains("Slow mode"));
+        verify(metricsService).recordSlowModeRedisFallback();
+        verify(chatMessagePersister, times(1)).persist(any(ChatMessage.class));
     }
 
     @Test
