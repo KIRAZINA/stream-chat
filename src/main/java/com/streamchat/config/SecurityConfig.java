@@ -109,12 +109,14 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/actuator/**"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET,
+.requestMatchers(HttpMethod.GET,
                                 "/api/streams",
                                 "/api/streams/*",
                                 "/api/streams/*/messages",
                                 "/api/streams/*/messages/replay",
-                                "/api/streams/*/presence"
+                                "/api/streams/*/presence",
+                                "/api/streams/*/emotes",
+                                "/api/emotes/global"
                         ).permitAll()
 
                         // Authenticated endpoints

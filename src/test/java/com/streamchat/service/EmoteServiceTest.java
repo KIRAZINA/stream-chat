@@ -25,6 +25,9 @@ class EmoteServiceTest {
     @Mock
     private EmoteRepository emoteRepository;
 
+    @Mock
+    private com.streamchat.config.CacheProperties cacheProperties;
+
     @InjectMocks
     private EmoteService emoteService;
 
