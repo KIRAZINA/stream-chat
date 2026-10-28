@@ -2,7 +2,7 @@
  * MessageInput component for sending chat messages
  */
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Textarea } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { useChatStore } from '../../stores/chat-store';

@@ -64,8 +64,20 @@ const StreamPage = () => {
 
         {/* Mobile mod panel overlay */}
         {showModPanel && (
-          <div className="md:hidden fixed inset-0 z-50 bg-black bg-opacity-50" onClick={() => setShowModPanel(false)}>
-            <div className="absolute right-0 top-0 h-full w-80 bg-white dark:bg-gray-800" onClick={e => e.stopPropagation()}>
+          <div
+            className="md:hidden fixed inset-0 z-50 bg-black bg-opacity-50"
+            onClick={() => setShowModPanel(false)}
+            onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') setShowModPanel(false); }}
+            role="button"
+            tabIndex={0}
+          >
+            <div
+              className="absolute right-0 top-0 h-full w-80 bg-white dark:bg-gray-800"
+              onClick={e => e.stopPropagation()}
+              onKeyDown={e => e.stopPropagation()}
+              role="button"
+              tabIndex={-1}
+            >
               <StreamSettingsForm streamKey={streamKey} />
             </div>
           </div>

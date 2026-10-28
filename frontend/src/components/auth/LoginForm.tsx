@@ -63,7 +63,7 @@ export function LoginForm() {
         onClick={() => navigate('/register')}
         className="w-full"
       >
-        Don't have an account? Register
+        Don&apos;t have an account? Register
       </Button>
     </form>
   );
